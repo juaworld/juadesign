@@ -303,6 +303,12 @@ a.rel:hover{border-color:var(--line-2)}
   .legend{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
   .sug-l{grid-template-columns:420px minmax(0,1fr)}
 }
+.vote{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:4px 12px;font-size:13px;font-weight:600;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.vote:not([disabled]):hover{border-color:var(--line-2)}
+.vote[disabled]{cursor:default;opacity:.55}
+.vote.on{opacity:1}
+.vote.agree.on{border-color:#BFDCC9;background:#EEF7F1;color:#2F7D4F}
+.vote.disagree.on{border-color:#F6CACB;background:var(--brand-soft);color:var(--brand-ink)}
 
 </style>
 </head>
@@ -332,11 +338,12 @@ var S = {
   db: null, history: [], isAdmin: false, preview: false,
   token: LS.get('hb_token', ''), code: LS.get('hb_code', ''),
   sugs: null, sugFilter: { status: 'all', cat: 'all', sort: 'new', tab: 'all' },
-  mine: LS.get('hb_mine', []), liked: LS.get('hb_liked', {}),
+  mine: LS.get('hb_mine', []), voted: LS.get('hb_voted', {}), device: LS.get('hb_device', ''),
   openTask: {}, loading: true, err: ''
 };
 
 var $app = document.getElementById('app');
+if (!S.device) { S.device = (Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)).replace(/[^a-z0-9]/g, '').slice(0, 24); LS.set('hb_device', S.device); }
 
 /* ===== 유틸 ===== */
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -354,6 +361,8 @@ var ICON = {
   plus: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   chev: '<svg class="ico chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
   lock: '<svg class="ico" style="width:13px;height:13px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  up: '<svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v11H3V10z"/><path d="M7 10l4-8a3 3 0 0 1 3 3v4h6a2 2 0 0 1 2 2.3l-1.4 8A2 2 0 0 1 18.6 21H7"/></svg>',
+  down: '<svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V3h4v11z"/><path d="M17 14l-4 8a3 3 0 0 1-3-3v-4H4a2 2 0 0 1-2-2.3l1.4-8A2 2 0 0 1 5.4 3H17"/></svg>',
   heart: '<svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.7 4.5c2.1 0 3.6 1.2 5.3 3 1.7-1.8 3.2-3 5.3-3 3.7 0 5.8 3.9 4.3 7.3C19.5 16.4 12 21 12 21Z"/></svg>',
   eye: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>'
 };
@@ -446,7 +455,7 @@ function saveDb(note, publicNote) {
   return api('saveDb', { db: snapshot, note: note, publicNote: publicNote !== false, baseUpdatedAt: base }).then(function (res) {
     if (!res.ok) { toast(res.error || '저장 실패', true); throw new Error(res.error); }
     S.db.meta.updatedAt = res.updatedAt;
-    S.history.push({ at: res.updatedAt, note: note, by: 'admin', public: publicNote !== false });
+    if (res.history) S.history = res.history; else S.history.push({ at: res.updatedAt, note: note, by: 'admin', public: publicNote !== false });
     toast('저장했습니다');
     return res;
   });
@@ -468,7 +477,6 @@ function render() {
   if (S.err === 'NO_API') return renderNoApi();
   var r = route();
   var navs = [['home', '홈'], ['rules', '전체 규정'], ['tasks', '개선과제'], ['suggest', '건의함'], ['history', '공지·개정이력']];
-  if (S.db && ((S.db.docs || []).length || adminView())) navs.push(['docs', adminView() ? '검토자료' : '참고자료']);
   if (adminView()) navs.push(['settings', '관리 설정']);
   var hd = '';
   if (S.isAdmin) {
@@ -480,7 +488,7 @@ function render() {
   var body;
   if (S.loading || !S.db) body = S.err ? '<div class="wrap"><div class="card empty">' + esc(S.err) + '<div style="margin-top:12px"><button class="btn" data-act="reload">다시 시도</button></div></div></div>' : skeleton();
   else {
-    var fn = { home: pHome, rules: pRules, tasks: pTasks, suggest: pSuggest, history: pHistory, docs: pDocs, settings: pSettings }[r.path] || pHome;
+    var fn = { home: pHome, rules: pRules, tasks: pTasks, suggest: pSuggest, history: pHistory, settings: pSettings }[r.path] || pHome;
     if (r.path === 'settings' && !adminView()) fn = pHome;
     body = '<main class="wrap">' + fn(r.q) + '</main>';
   }
@@ -509,16 +517,40 @@ function renderNoApi() {
   $app.innerHTML = '<div class="gate"><div class="card"><img src="' + window.HB_LOGO + '" alt="한백"><h2 style="margin:0 0 8px;font-size:20px">서버 연결 설정 전입니다</h2><p class="muted small">index.html 상단의 HB_API_URL에 Apps Script 웹 앱 주소를 넣어 주세요.</p></div></div>';
 }
 
+/* ----- 홈 문구 (관리자 편집) ----- */
+var HOME_DEF = {
+  title: '**한백**의 일하는 기준을\n한곳에서 확인하세요',
+  searchHint: '예: 야근수당, 연차, 경조휴가, 육아휴직',
+  btnSuggest: '건의하기', btnRules: '전체 규정 보기',
+  secStatus: '항목 상태', secStatusHint: '상태를 누르면 해당 항목만 볼 수 있습니다',
+  secNotice: '공지', secCats: '분류별 규정', secChanging: '개정 검토 중인 항목', secRecent: '최근 변경'
+};
+var HOME_LABEL = { title: '큰 제목 (**강조**는 빨간색, 줄바꿈 가능)', searchHint: '검색창 안내 문구', btnSuggest: '빨간 버튼', btnRules: '흰 버튼', secStatus: '섹션: 항목 상태', secStatusHint: '섹션 설명: 항목 상태', secNotice: '섹션: 공지', secCats: '섹션: 분류별 규정', secChanging: '섹션: 개정 검토 항목', secRecent: '섹션: 최근 변경' };
+function HT(k) { var h = (S.db.meta && S.db.meta.home) || {}; return h[k] != null && h[k] !== '' ? h[k] : HOME_DEF[k]; }
+function heroTitle(t) { return esc(t).replace(/\*\*(.+?)\*\*/g, '<em>$1</em>').replace(/\n/g, '<br>'); }
+function editHome() {
+  var m = S.db.meta;
+  var inner = '<div class="fg"><label class="f">메인 제목</label><textarea class="in" name="title" style="min-height:70px">' + esc(HT('title')) + '</textarea><div class="hint">엔터로 줄바꿈 · <b>**한백**</b>처럼 감싸면 빨간색 강조</div></div>' +
+    '<div class="fg"><label class="f">소개 문구</label><textarea class="in" name="intro" style="min-height:90px">' + esc(m.intro || '') + '</textarea></div>';
+  modal('메인 문구 편집', inner, '<button type="button" class="btn" data-act="close">취소</button><button class="btn pri">저장</button>');
+  S.modalSubmit = function (v) {
+    m.home = m.home || {};
+    if (v.title.trim()) m.home.title = v.title.replace(/\r/g, ''); else delete m.home.title;
+    m.intro = v.intro.trim();
+    return saveDb('메인 화면 문구 수정', false).then(function () { closeModal(); render(); });
+  };
+}
+
 /* ----- 홈 ----- */
 function pHome() {
   var db = S.db, rules = visibleRules();
   var counts = {}; rules.forEach(function (r) { counts[r.status] = (counts[r.status] || 0) + 1; });
   var pinned = (db.notices || []).filter(function (n) { return n.pin && (n.public !== false || adminView()); });
-  var h = '<section class="hero"><h1><em>한백</em>의 일하는 기준을<br>한곳에서 확인하세요</h1><p>' + esc(db.meta.intro) + '</p>' +
-    '<form class="search-big" data-form="search" role="search">' + ICON.search + '<input name="q" placeholder="예: 야근수당, 연차, 경조휴가, 육아휴직" aria-label="규정 검색"><button class="btn dark sm">검색</button></form>' +
-    '<div class="row"><a class="btn pri" href="#/suggest">건의하기</a><a class="btn" href="#/rules">전체 규정 보기</a><span class="muted small">기준: ' + esc(db.meta.baseVersion) + '</span></div></section>';
+  var h = (adminView() ? '<div class="row" style="justify-content:flex-end;margin-bottom:10px"><button class="btn sm dark" data-act="home-edit">' + ICON.edit + '메인 문구 편집</button></div>' : '') + '<section class="hero"><h1>' + heroTitle(HT('title')) + '</h1><p>' + esc(db.meta.intro) + '</p>' +
+    '<form class="search-big" data-form="search" role="search">' + ICON.search + '<input name="q" placeholder="' + esc(HT('searchHint')) + '" aria-label="규정 검색"><button class="btn dark sm">검색</button></form>' +
+    '<div class="row"><a class="btn pri" href="#/suggest">' + esc(HT('btnSuggest')) + '</a><a class="btn" href="#/rules">' + esc(HT('btnRules')) + '</a><span class="muted small">기준: ' + esc(db.meta.baseVersion) + '</span></div></section>';
 
-  h += '<div class="sec-t"><h2>항목 상태</h2><span class="muted small">상태를 누르면 해당 항목만 볼 수 있습니다</span></div><div class="legend">';
+  h += '<div class="sec-t"><h2>' + esc(HT('secStatus')) + '</h2><span class="muted small">' + esc(HT('secStatusHint')) + '</span></div><div class="legend">';
   (db.statuses.rule || []).forEach(function (s) {
     if (!counts[s.key] && (s.key === 'ended' || s.key === 'planned')) return;
     h += '<a class="card lg" href="#/rules?status=' + s.key + '">' + badge('rule', s.key) + '<div class="num">' + (counts[s.key] || 0) + '</div><div class="d">' + esc(s.desc) + '</div></a>';
@@ -526,12 +558,12 @@ function pHome() {
   h += '</div>';
 
   if (pinned.length) {
-    h += '<div class="sec-t"><h2>공지</h2><a class="btn ghost sm" href="#/history">전체 보기</a></div><div class="grid">';
+    h += '<div class="sec-t"><h2>' + esc(HT('secNotice')) + '</h2><a class="btn ghost sm" href="#/history">전체 보기</a></div><div class="grid">';
     pinned.forEach(function (n) { h += '<div class="card notice"><div class="muted small">' + fmtDate(n.date) + '</div><div class="t">' + esc(n.title) + '</div><div class="small" style="color:var(--ink-2)">' + esc(n.body) + '</div></div>'; });
     h += '</div>';
   }
 
-  h += '<div class="sec-t"><h2>분류별 규정</h2></div><div class="cats">';
+  h += '<div class="sec-t"><h2>' + esc(HT('secCats')) + '</h2></div><div class="cats">';
   db.categories.forEach(function (c) {
     var rs = rules.filter(function (r) { return r.cat === c.id; });
     var bar = (db.statuses.rule || []).map(function (s) { var n = rs.filter(function (r) { return r.status === s.key; }).length; return n ? '<span style="width:' + (n / rs.length * 100) + '%;background:' + s.color + '" title="' + esc(s.label) + ' ' + n + '"></span>' : ''; }).join('');
@@ -539,11 +571,11 @@ function pHome() {
   });
   h += '</div>';
 
-  var recent = S.history.slice(-5).reverse();
+  var recent = sortedHist().slice(0, 5);
   var changing = rules.filter(function (r) { return r.status === 'review' || r.status === 'planned'; }).slice(0, 8);
-  h += '<div class="two" style="margin-top:34px"><div><div class="sec-t" style="margin-top:0"><h2>개정 검토 중인 항목</h2><a class="btn ghost sm" href="#/rules?status=review">더 보기</a></div><div class="card">' +
+  h += '<div class="two" style="margin-top:34px"><div><div class="sec-t" style="margin-top:0"><h2>' + esc(HT('secChanging')) + '</h2><a class="btn ghost sm" href="#/rules?status=review">더 보기</a></div><div class="card">' +
     (changing.length ? changing.map(function (r) { return '<a href="#/rules?id=' + r.id + '" style="display:flex;gap:10px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--line);text-decoration:none"><span class="idc">' + r.id + '</span><span style="flex:1;font-weight:600">' + esc(r.title) + '</span>' + badge('rule', r.status) + '</a>'; }).join('') : '<div class="empty">없음</div>') + '</div></div>' +
-    '<div><div class="sec-t" style="margin-top:0"><h2>최근 변경</h2><a class="btn ghost sm" href="#/history">이력 보기</a></div><div class="card card-b">' +
+    '<div><div class="sec-t" style="margin-top:0"><h2>' + esc(HT('secRecent')) + '</h2><a class="btn ghost sm" href="#/history">이력 보기</a></div><div class="card card-b">' +
     (recent.length ? '<div class="tl">' + recent.map(function (x) { return '<div class="it"><div class="at">' + fmtDate(x.at) + '</div><div>' + esc(x.note) + '</div></div>'; }).join('') + '</div>' : '<div class="muted">아직 기록이 없습니다.</div>') + '</div></div></div>';
   return h;
 }
@@ -657,8 +689,8 @@ function pSuggest(q) {
   var h = '<div class="page-h"><div><h1>건의함</h1><p>제도·복지·업무환경에 대한 의견을 자유롭게 남겨 주세요. 이름을 비우면 익명으로 등록됩니다.</p></div></div>';
   h += '<div class="sug-l"><div class="sug-form"><form class="card card-b" data-form="sug">' +
     '<h2 style="font-size:17px;margin:0 0 14px">의견 남기기</h2>' +
-    '<div class="fg"><label class="f" for="s-cat">분류</label><select class="in" id="s-cat" name="cat">' + cats.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') + '</select></div>' +
-    '<div class="fg"><label class="f" for="s-rel">관련 규정 (선택)</label><select class="in" id="s-rel" name="related"><option value="">선택 안 함</option>' + visibleRules().map(function (r) { return '<option value="' + r.id + '"' + (q.rel === r.id ? ' selected' : '') + '>' + r.id + ' ' + esc(r.title) + '</option>'; }).join('') + '</select></div>' +
+    '<div class="fg"><label class="f" for="s-cat">분류</label><select class="in" id="s-cat" name="cat">' + cats.map(function (c) { return '<option' + (c === (S.sugCat || cats[0]) ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select></div>' +
+    '<div class="fg"><label class="f" for="s-rel">관련 규정 (선택)</label><select class="in" id="s-rel" name="related">' + relOptions(S.sugCat || cats[0], q.rel) + '</select><div class="hint">선택한 분류에 맞는 규정만 표시됩니다.</div></div>' +
     '<div class="fg"><label class="f" for="s-title">제목</label><input class="in" id="s-title" name="title" maxlength="120" required placeholder="한 줄로 요약해 주세요"></div>' +
     '<div class="fg"><label class="f" for="s-body">내용</label><textarea class="in" id="s-body" name="body" maxlength="4000" required placeholder="현재 어떤 점이 불편한지, 어떻게 바뀌면 좋을지 적어 주세요." style="min-height:140px"></textarea></div>' +
     '<div class="fg"><label class="f" for="s-name">이름 (선택)</label><input class="in" id="s-name" name="name" maxlength="30" placeholder="비우면 익명"></div>' +
@@ -671,24 +703,39 @@ function pSuggest(q) {
   h += '<div class="row" style="margin-bottom:12px"><div class="seg" data-seg="tab"><button type="button" class="' + (F.tab === 'all' ? 'on' : '') + '" data-v="all">' + (adminView() ? '전체 건의' : '공개 건의') + ' ' + all.length + '</button><button type="button" class="' + (F.tab === 'mine' ? 'on' : '') + '" data-v="mine">내 건의 ' + S.mine.length + '</button></div><span class="sp"></span>' +
     '<select class="in" style="width:auto;padding:6px 10px;font-size:13.5px" data-filter="status" aria-label="상태"><option value="all">모든 상태</option>' + db.statuses.suggestion.map(function (s) { return '<option value="' + s.key + '"' + (F.status === s.key ? ' selected' : '') + '>' + esc(s.label) + '</option>'; }).join('') + '</select>' +
     '<select class="in" style="width:auto;padding:6px 10px;font-size:13.5px" data-filter="cat" aria-label="분류"><option value="all">모든 분류</option>' + cats.map(function (c) { return '<option' + (F.cat === c ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select>' +
-    '<select class="in" style="width:auto;padding:6px 10px;font-size:13.5px" data-filter="sort" aria-label="정렬"><option value="new">최신순</option><option value="like"' + (F.sort === 'like' ? ' selected' : '') + '>공감순</option></select></div>';
+    '<select class="in" style="width:auto;padding:6px 10px;font-size:13.5px" data-filter="sort" aria-label="정렬"><option value="new">최신순</option><option value="like"' + (F.sort === 'like' ? ' selected' : '') + '>찬성순</option></select></div>';
   if (S.sugs === null || S.sugs === 'loading') return h + '<div class="grid">' + [1, 2, 3].map(function () { return '<div class="skel" style="height:120px"></div>'; }).join('') + '</div></div></div>';
   var src = F.tab === 'mine' ? mineItems : all;
   var list = src.filter(function (s) { return (F.status === 'all' || s.status === F.status) && (F.cat === 'all' || s.cat === F.cat); });
-  if (F.sort === 'like') list = list.slice().sort(function (a, b) { return (b.likes || 0) - (a.likes || 0); });
+  if (F.sort === 'like') list = list.slice().sort(function (a, b) { return (b.agree || 0) - (a.agree || 0) || (a.disagree || 0) - (b.disagree || 0); });
   if (!list.length) h += '<div class="card empty">' + (F.tab === 'mine' ? '이 기기에서 등록한 건의가 없습니다.' : '아직 등록된 건의가 없습니다. 첫 의견을 남겨 주세요.') + '</div>';
   h += '<div class="grid">' + list.map(sugCard).join('') + '</div></div></div>';
   return h;
 }
+var CAT_MAP_DEF = { '근태·임금': ['wt'], '휴가': ['lv', 'mp'], '복지': ['wf'], '교육·성장': ['et', 'WF-04', 'WF-02'], '업무환경': ['WT-02', 'WT-03', 'WT-05', 'WF-11', 'WF-10'], '인사제도': ['hr', 'ET-01'], '기타': [] };
+function catMap() { return S.db.meta.suggestCatMap || CAT_MAP_DEF; }
+function relRulesFor(cat) {
+  var map = catMap()[cat];
+  var rules = visibleRules();
+  if (!map || !map.length) return rules;
+  return rules.filter(function (r) { return map.indexOf(r.cat) >= 0 || map.indexOf(r.id) >= 0; });
+}
+function relOptions(cat, sel) {
+  var rs = relRulesFor(cat), groups = {};
+  rs.forEach(function (r) { (groups[r.cat] = groups[r.cat] || []).push(r); });
+  var h = '<option value="">선택 안 함</option>';
+  S.db.categories.forEach(function (c) { if (!groups[c.id]) return; h += '<optgroup label="' + esc(c.name) + '">' + groups[c.id].map(function (r) { return '<option value="' + r.id + '"' + (sel === r.id ? ' selected' : '') + '>' + r.id + ' ' + esc(r.title) + '</option>'; }).join('') + '</optgroup>'; });
+  return h;
+}
 function sugCard(s) {
-  var liked = !!S.liked[s.id];
+  var my = S.voted[s.id];
   var rel = s.related ? (S.db.rules || []).filter(function (r) { return r.id === s.related; })[0] : null;
   var h = '<article class="card sug" id="s-' + esc(s.id) + '"><div class="sug-h"><h3>' + esc(s.title) + '</h3>' + badge('suggestion', s.status) + '</div>' +
     '<div class="sug-meta"><span class="tag">' + esc(s.cat) + '</span>' + (s.visibility === 'private' ? '<span class="tag">' + ICON.lock + ' 담당자만</span>' : '') +
     '<span>' + (s.anonymous || !s.name ? '익명' : esc(s.name)) + '</span><span>·</span><span>' + fmtDate(s.createdAt) + '</span>' + (rel ? '<a class="rel" href="#/rules?id=' + rel.id + '">' + rel.id + ' ' + esc(rel.title) + '</a>' : '') + '</div>' +
     '<div class="sug-body' + (s.body.length > 220 ? ' clamp' : '') + '">' + esc(s.body) + '</div>' + (s.body.length > 220 ? '<button class="btn ghost sm" data-act="unclamp" style="margin-top:4px;padding-left:0">더 보기</button>' : '');
   if (s.answer) h += '<div class="answer"><div class="who">담당자 답변<span class="muted" style="font-weight:500">' + fmtDate(s.answeredAt) + '</span></div><div class="txt">' + esc(s.answer) + '</div></div>';
-  h += '<div class="sug-f">' + (s.visibility === 'public' ? '<button class="like' + (liked ? ' on' : '') + '" data-act="like" data-id="' + esc(s.id) + '" aria-pressed="' + liked + '">' + ICON.heart + ' 공감 ' + (s.likes || 0) + '</button>' : '') + '<span class="muted small">접수번호 ' + esc(s.id) + '</span></div>';
+  h += '<div class="sug-f">' + (s.visibility === 'public' ? '<button class="vote agree' + (my === 'agree' ? ' on' : '') + '" data-act="vote" data-v="agree" data-id="' + esc(s.id) + '"' + (my ? ' disabled' : '') + ' aria-pressed="' + (my === 'agree') + '">' + ICON.up + ' 찬성 ' + (s.agree || 0) + '</button><button class="vote disagree' + (my === 'disagree' ? ' on' : '') + '" data-act="vote" data-v="disagree" data-id="' + esc(s.id) + '"' + (my ? ' disabled' : '') + ' aria-pressed="' + (my === 'disagree') + '">' + ICON.down + ' 반대 ' + (s.disagree || 0) + '</button>' + (my ? '<span class="muted small">의견 표시함</span>' : '') : '') + '<span class="muted small">접수번호 ' + esc(s.id) + '</span></div>';
   if (adminView()) {
     h += '<form class="adm-box" data-form="sug-adm" data-id="' + esc(s.id) + '"><div class="f3"><div><label class="f">상태</label><select class="in" name="status">' + S.db.statuses.suggestion.map(function (x) { return '<option value="' + x.key + '"' + (x.key === s.status ? ' selected' : '') + '>' + esc(x.label) + '</option>'; }).join('') + '</select></div>' +
       '<div><label class="f">공개</label><select class="in" name="visibility"><option value="public"' + (s.visibility === 'public' ? ' selected' : '') + '>전체 공개</option><option value="private"' + (s.visibility === 'private' ? ' selected' : '') + '>담당자만</option></select></div>' +
@@ -706,21 +753,14 @@ function pHistory() {
   var h = '<div class="page-h"><div><h1>공지·개정이력</h1><p>규정이 바뀌면 이곳에 기록됩니다.</p></div>' + (adminView() ? '<button class="btn pri" data-act="notice-new">' + ICON.plus + '공지 작성</button>' : '') + '</div>';
   h += '<div class="two"><div><div class="sec-t" style="margin-top:0"><h2>공지</h2></div><div class="grid">' +
     (ns.length ? ns.map(function (n) { return '<div class="card notice"><div class="row"><span class="muted small">' + fmtDate(n.date) + '</span>' + (n.pin ? '<span class="tag red">상단 고정</span>' : '') + (n.public === false ? '<span class="tag">' + ICON.lock + ' 비공개</span>' : '') + '<span class="sp"></span>' + (adminView() ? '<button class="btn ghost sm" data-act="notice-edit" data-id="' + esc(n.id) + '">' + ICON.edit + '</button>' : '') + '</div><div class="t">' + esc(n.title) + '</div><div style="white-space:pre-wrap;font-size:14px;color:var(--ink-2)">' + esc(n.body) + '</div></div>'; }).join('') : '<div class="card empty">공지가 없습니다.</div>') + '</div></div>';
-  var hist = S.history.slice().reverse();
-  h += '<div><div class="sec-t" style="margin-top:0"><h2>개정이력</h2></div><div class="card card-b">' + (hist.length ? '<div class="tl">' + hist.map(function (x) { return '<div class="it"><div class="at">' + fmtDate(x.at) + (adminView() && x.public === false ? ' · 관리자 전용' : '') + '</div><div>' + esc(x.note) + '</div></div>'; }).join('') + '</div>' : '<div class="muted">기록이 없습니다.</div>') + '</div></div></div>';
+  var hist = sortedHist();
+  h += '<div><div class="sec-t" style="margin-top:0"><h2>개정이력</h2>' + (adminView() ? '<button class="btn sm" data-act="hist-new">' + ICON.plus + '이력 추가</button>' : '') + '</div><div class="card card-b">' + (hist.length ? '<div class="tl">' + hist.map(function (x) {
+    return '<div class="it"><div class="row" style="gap:6px"><span class="at">' + fmtDate(x.at) + '</span>' + (adminView() && x.public === false ? '<span class="tag">' + ICON.lock + ' 관리자 전용</span>' : '') + '<span class="sp"></span>' + (adminView() && x.row ? '<button class="btn ghost sm" data-act="hist-edit" data-id="' + x.row + '" aria-label="이력 수정">' + ICON.edit + '</button>' : '') + '</div><div>' + esc(x.note) + '</div></div>';
+  }).join('') + '</div>' : '<div class="muted">기록이 없습니다.</div>') + '</div></div></div>';
   return h;
 }
 
-/* ----- 검토자료(문서) ----- */
-function pDocs(q) {
-  var docs = (S.db.docs || []).filter(function (d) { return d.public || adminView(); });
-  var cur = docs.filter(function (d) { return d.id === q.id; })[0] || docs[0];
-  var h = '<div class="page-h"><div><h1>' + (adminView() ? '검토자료' : '참고자료') + '</h1><p>' + (adminView() ? '종합검토보고서의 법규 검토·비용·로드맵 등. 기본은 관리자 전용이며, 문서별로 공개할 수 있습니다.' : '공개된 참고 문서입니다.') + '</p></div>' + (adminView() ? '<button class="btn pri" data-act="doc-new">' + ICON.plus + '문서 추가</button>' : '') + '</div>';
-  if (!docs.length) return h + '<div class="card empty">문서가 없습니다.</div>';
-  h += '<div class="docs-l"><aside class="side">' + docs.map(function (d) { return '<a href="#/docs?id=' + d.id + '" class="' + (d === cur ? 'on' : '') + '">' + esc(d.title) + (adminView() && !d.public ? '<span class="n">' + ICON.lock + '</span>' : '') + '</a>'; }).join('') + '</aside>';
-  h += '<article class="card card-b"><div class="row" style="margin-bottom:14px"><h2 style="margin:0;font-size:20px;flex:1">' + esc(cur.title) + '</h2>' + (adminView() ? '<button class="btn sm" data-act="doc-edit" data-id="' + esc(cur.id) + '">' + ICON.edit + '편집</button>' : '') + '</div>' + rich(cur.body) + '<p class="muted small" style="margin-top:18px">갱신 ' + fmtDate(cur.updated) + '</p></article></div>';
-  return h;
-}
+function sortedHist() { return S.history.slice().sort(function (a, b) { return String(a.at) < String(b.at) ? 1 : String(a.at) > String(b.at) ? -1 : (b.row || 0) - (a.row || 0); }); }
 
 /* ----- 관리 설정 ----- */
 function loadSettings() {
@@ -745,7 +785,7 @@ function pSettings() {
     '<div class="f2"><div class="fg"><label class="f">사이트 이름</label><input class="in" name="siteTitle" value="' + esc(db.meta.siteTitle) + '"></div><div class="fg"><label class="f">기준 버전 표기</label><input class="in" name="baseVersion" value="' + esc(db.meta.baseVersion) + '"></div></div>' +
     '<div class="f2"><div class="fg"><label class="f">회사명</label><input class="in" name="company" value="' + esc(db.meta.company) + '"></div><div class="fg"><label class="f">담당 부서</label><input class="in" name="owner" value="' + esc(db.meta.owner) + '"></div></div>' +
     '<div class="fg"><label class="f">홈 소개 문구</label><textarea class="in" name="intro">' + esc(db.meta.intro) + '</textarea></div>' +
-    '<div class="fg"><label class="f">건의함 분류 (쉼표로 구분)</label><input class="in" name="suggestCats" value="' + esc((db.meta.suggestCats || []).join(', ')) + '"></div>' +
+    '<div class="fg"><label class="f">건의함 분류와 관련 규정</label><textarea class="in code" name="suggestCats" style="min-height:150px">' + esc((db.meta.suggestCats || []).map(function (c) { return c + ' = ' + ((catMap()[c]) || []).join(', '); }).join('\n')) + '</textarea><div class="hint">한 줄에 하나씩 <b>분류명 = 규정분류ID 또는 항목ID</b> (예: 휴가 = lv, mp / 업무환경 = WT-02, WF-11). 오른쪽을 비우면 전체 규정이 나옵니다. 규정분류ID: ' + esc(db.categories.map(function (c) { return c.id + '(' + c.name + ')'; }).join(', ')) + '</div></div>' +
     '<button class="btn dark">문구 저장</button></form>';
 
   h += '<div class="card card-b" style="margin-top:16px"><div class="row" style="margin-bottom:6px"><h2 style="font-size:17px;margin:0;flex:1">상태 용어</h2><button class="btn sm" data-act="status-edit">용어 편집</button></div><p class="muted small" style="margin:0 0 14px">사이트 전체에 쓰이는 상태 이름·설명·색입니다.</p>';
@@ -825,20 +865,6 @@ function editTask(id) {
   };
 }
 
-function editDoc(id) {
-  var db = S.db, isNew = !id;
-  var d = isNew ? { id: 'D' + Date.now().toString().slice(-5), title: '', body: '', public: false } : db.docs.filter(function (x) { return x.id === id; })[0];
-  var inner = '<div class="fg"><label class="f">제목</label><input class="in" name="title" value="' + esc(d.title) + '" required></div>' +
-    '<div class="fg"><label class="f">본문</label><textarea class="in code" name="body" style="min-height:360px">' + esc(d.body) + '</textarea>' + MARKUP_HELP + '</div>' +
-    '<label class="chk"><input type="checkbox" name="public"' + (d.public ? ' checked' : '') + '> 직원에게 공개 (참고자료 메뉴에 표시)</label>';
-  modal(isNew ? '문서 추가' : '문서 편집', inner, (isNew ? '' : '<button type="button" class="btn danger l" data-act="doc-del" data-id="' + esc(d.id) + '">삭제</button>') + '<button type="button" class="btn" data-act="close">취소</button><button class="btn pri">저장</button>');
-  S.modalSubmit = function (v) {
-    var o = { id: d.id, title: v.title.trim(), body: v.body, public: v.public, updated: today() };
-    if (isNew) db.docs.push(o); else Object.assign(d, o);
-    return saveDb('문서 \'' + o.title + '\' ' + (isNew ? '추가' : '수정'), o.public).then(function () { closeModal(); go('#/docs?id=' + o.id); });
-  };
-}
-
 function editNotice(id) {
   var db = S.db, isNew = !id;
   var n = isNew ? { id: 'N' + Date.now().toString().slice(-6), date: today(), title: '', body: '', public: true, pin: false } : db.notices.filter(function (x) { return x.id === id; })[0];
@@ -849,6 +875,23 @@ function editNotice(id) {
     var o = { id: n.id, date: v.date, title: v.title.trim(), body: v.body, pin: v.pin, public: v.public };
     if (isNew) db.notices.push(o); else Object.assign(n, o);
     return saveDb('공지 \'' + o.title + '\' ' + (isNew ? '등록' : '수정'), false).then(function () { closeModal(); render(); });
+  };
+}
+
+function editHistory(row) {
+  var isNew = !row;
+  var x = isNew ? { at: '', note: '', public: true } : S.history.filter(function (h) { return String(h.row) === String(row); })[0];
+  if (!x) return;
+  var now = new Date(); var pad = function (n) { return ('0' + n).slice(-2); };
+  var atv = x.at ? String(x.at).replace(' ', 'T').slice(0, 16) : today() + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+  var inner = '<div class="fg"><label class="f">일시</label><input class="in" type="datetime-local" name="at" value="' + esc(atv) + '" required></div>' +
+    '<div class="fg"><label class="f">내용</label><textarea class="in" name="note" required style="min-height:90px">' + esc(x.note) + '</textarea></div>' +
+    '<label class="chk"><input type="checkbox" name="public"' + (x.public !== false ? ' checked' : '') + '> 직원에게 공개</label>';
+  modal(isNew ? '개정이력 추가' : '개정이력 수정', inner, (isNew ? '' : '<button type="button" class="btn danger l" data-act="hist-del" data-id="' + esc(row) + '">삭제</button>') + '<button type="button" class="btn" data-act="close">취소</button><button class="btn pri">저장</button>', 'sm');
+  S.modalSubmit = function (v) {
+    var at = v.at.length === 16 ? v.at + ':00' : v.at;
+    var req = isNew ? api('addHistory', { entry: { at: at, note: v.note.trim(), public: v.public } }) : api('updateHistory', { row: x.row, origAt: x.at, patch: { at: at, note: v.note.trim(), public: v.public } });
+    return req.then(function (res) { if (!res.ok) return toast(res.error, true); S.history = res.history; toast('저장했습니다'); closeModal(); render(); });
   };
 }
 
@@ -915,21 +958,24 @@ document.addEventListener('click', function (e) {
     case 'task-edit': editTask(id); break;
     case 'task-pub': var t = db.tasks.filter(function (x) { return x.id === id; })[0]; t.public = !t.public; saveDb('개선과제 ' + id + (t.public ? ' 직원 공개' : ' 비공개 전환'), t.public).then(render); break;
     case 'task-del': if (confirm(id + ' 과제를 삭제할까요?')) { db.tasks = db.tasks.filter(function (x) { return x.id !== id; }); saveDb('개선과제 ' + id + ' 삭제', false).then(function () { closeModal(); render(); }); } break;
-    case 'doc-new': editDoc(null); break;
-    case 'doc-edit': editDoc(id); break;
-    case 'doc-del': if (confirm('문서를 삭제할까요?')) { db.docs = db.docs.filter(function (x) { return x.id !== id; }); saveDb('문서 삭제', false).then(function () { closeModal(); go('#/docs'); }); } break;
     case 'notice-new': editNotice(null); break;
     case 'notice-edit': editNotice(id); break;
     case 'notice-del': if (confirm('공지를 삭제할까요?')) { db.notices = db.notices.filter(function (x) { return x.id !== id; }); saveDb('공지 삭제', false).then(function () { closeModal(); render(); }); } break;
     case 'status-edit': editStatuses(); break;
+    case 'home-edit': editHome(); break;
+    case 'hist-new': editHistory(null); break;
+    case 'hist-edit': editHistory(id); break;
+    case 'hist-del': var hx = S.history.filter(function (h) { return String(h.row) === String(id); })[0]; if (hx && confirm('이 이력을 삭제할까요?')) api('deleteHistory', { row: hx.row, origAt: hx.at }).then(function (res) { if (!res.ok) return toast(res.error, true); S.history = res.history; toast('삭제했습니다'); closeModal(); render(); }); break;
     case 'unclamp': var b = el.previousElementSibling; if (b) b.classList.remove('clamp'); el.remove(); break;
-    case 'like':
-      var undo = !!S.liked[id];
-      api('like', { id: id, undo: undo }).then(function (res) {
-        if (!res.ok) return toast(res.error, true);
-        if (undo) delete S.liked[id]; else S.liked[id] = 1; LS.set('hb_liked', S.liked);
-        (S.sugs || []).concat(S.mineItems || []).forEach(function (s) { if (s.id === id) s.likes = res.likes; });
-        render();
+    case 'vote':
+      if (S.voted[id]) return toast('이 기기에서는 이미 의견을 표시했습니다', true);
+      var vv = el.getAttribute('data-v');
+      el.disabled = true;
+      api('vote', { id: id, vote: vv, device: S.device }).then(function (res) {
+        if (!res.ok) { if (res.code === 'VOTED') { S.voted[id] = vv; LS.set('hb_voted', S.voted); render(); } return toast(res.error, true); }
+        S.voted[id] = vv; LS.set('hb_voted', S.voted);
+        (S.sugs || []).concat(S.mineItems || []).forEach(function (s) { if (s.id === id) { s.agree = res.agree; s.disagree = res.disagree; } });
+        toast(vv === 'agree' ? '찬성했습니다' : '반대했습니다'); render();
       });
       break;
     case 'sug-del': if (confirm('이 건의를 삭제할까요? 되돌릴 수 없습니다.')) api('deleteSuggestion', { id: id }).then(function (res) { if (!res.ok) return toast(res.error, true); S.sugs = S.sugs.filter(function (s) { return s.id !== id; }); toast('삭제했습니다'); render(); }); break;
@@ -949,6 +995,7 @@ document.addEventListener('change', function (e) {
   var f = e.target.getAttribute && e.target.getAttribute('data-filter');
   if (f) { S.sugFilter[f] = e.target.value; render(); return; }
   if (e.target.matches('input[type=file][data-act=import]')) importJson(e.target.files[0]);
+  if (e.target.id === 's-cat') { S.sugCat = e.target.value; var rel = document.getElementById('s-rel'); if (rel) rel.innerHTML = relOptions(S.sugCat, ''); }
 });
 document.addEventListener('submit', function (e) {
   var form = e.target, kind = form.getAttribute('data-form'); if (!kind) return;
@@ -981,7 +1028,8 @@ document.addEventListener('submit', function (e) {
       busy(api('setViewCode', { viewCode: v.viewCode }).then(function (res) { if (!res.ok) return toast(res.error, true); S.code = res.viewCode; LS.set('hb_code', S.code); toast(res.viewCode ? '열람 코드를 저장했습니다' : '열람 코드를 해제했습니다'); S.settings.viewCode = res.viewCode; }));
       break;
     case 'meta':
-      Object.assign(S.db.meta, { siteTitle: v.siteTitle, baseVersion: v.baseVersion, company: v.company, owner: v.owner, intro: v.intro, suggestCats: split(v.suggestCats) });
+      Object.assign(S.db.meta, { siteTitle: v.siteTitle, baseVersion: v.baseVersion, company: v.company, owner: v.owner, intro: v.intro });
+      var sc = [], sm = {}; v.suggestCats.split('\n').forEach(function (l) { var p = l.split('='); var n = (p[0] || '').trim(); if (!n) return; sc.push(n); sm[n] = split(p[1] || ''); }); if (sc.length) { S.db.meta.suggestCats = sc; S.db.meta.suggestCatMap = sm; }
       busy(saveDb('사이트 문구 수정', false).then(render));
       break;
   }
