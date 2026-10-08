@@ -24,7 +24,7 @@ def line(points):
     return [{"lat": p[0], "lon": p[1]} for p in points]
 
 def curve(p0, p1, amp=0.0012, n=14, phase=0.0):
-    """두 점 사이를 n분할하고 수직 방향으로 사인 곡선 오프셋 → 실제 도로처럼 완만히 휘는 폴리라인"""
+    """두 점 사이를 n분할하고 수직 방향으로 사인 공선 오프셋 → 실제 도로처럼 완만히 휘는 폴리라인"""
     (a0, b0), (a1, b1) = p0, p1
     dx, dy = a1 - a0, b1 - b0
     L = math.hypot(dx, dy) or 1
@@ -58,9 +58,9 @@ PARKS = [
 ]
 COMPANIES = [
     ("현대모비스 충주공장", 36.9775, 127.7935), ("미원스페셜티케미칼", 36.9770, 127.7985), ("유한킴벌리 충주공장", 36.9765, 127.8105),
-    ("한국팜비오", 36.9820, 127.8010), ("글로텍", 36.9805, 127.7930), ("다산기업", 36.9790, 127.8010), ("벨맷플로우컨트롤", 36.9780, 127.8020),
+    ("한국팸비오", 36.9820, 127.8010), ("글로텍", 36.9805, 127.7930), ("다산기업", 36.9790, 127.8010), ("벨맷플로우컨트롤", 36.9780, 127.8020),
     ("한성공업 콤푸레샤", 36.9790, 127.8055), ("서림", 36.9770, 127.8060), ("자은테크", 36.9755, 127.8065), ("리켐", 36.9730, 127.7990),
-    ("퍼스트칼라", 36.9695, 127.7975), ("LT소재 충주공장", 36.9680, 127.7915), ("하이텍팜 충주공장", 36.9690, 127.8010), ("대신전선", 36.9655, 127.7960),
+    ("퍼스트칼라", 36.9695, 127.7975), ("LT소재 충주공장", 36.9680, 127.7915), ("하이텍팸 충주공장", 36.9690, 127.8010), ("대신전선", 36.9655, 127.7960),
     ("서울금속", 36.9640, 127.7905), ("전성", 36.9610, 127.8000), ("대유플러스", 36.9590, 127.8030),
 ]
 APTS = [("충주오드카운티APT", 36.9560, 127.7890), ("충주지웰APT", 36.9535, 127.7950)]
@@ -218,12 +218,13 @@ class Handler(SimpleHTTPRequestHandler):
         body = self.rfile.read(n).decode("utf-8")
         if u.path == "/mock/overpass":
             q = urllib.parse.parse_qs(body).get("data", [""])[0]
+            els = []
             if '"highway"' in q:
-                els = roads_elements()
-            elif '"leisure"' in q:
-                els = areas_elements()
-            else:
-                els = pois_elements()
+                els += roads_elements()
+            if '"leisure"' in q:
+                els += areas_elements()
+            if '"building"' in q:
+                els += pois_elements()
             return self._send(200, "application/json; charset=utf-8", json.dumps({"elements": els}, ensure_ascii=False).encode("utf-8"))
         return self._send(404, "text/plain", b"not found")
 
