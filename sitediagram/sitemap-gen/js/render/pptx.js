@@ -10,6 +10,7 @@ import { makeProjector } from './png.js';
 const SLIDE_W = 12192000; // 13.333in (EMU)
 const NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
 const FONT = '맑은 고딕';
+const FONT_LIGHT = 'Malgun Gothic Semilight'; // Windows 8.1+ 기본 탑재. 없으면 PowerPoint가 기본 글꼴로 대체
 
 const hex6 = (c, fallback = 'FFFFFF') => {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(c || '').trim());
@@ -97,7 +98,8 @@ export async function buildPPTX(scene, opts) {
     if (TW.boost > 0) rpr += `<a:ln w="${Math.max(635, Math.round(TW.boost * fontPx * PT * 12700))}">${solidFill(color)}</a:ln>`; // 글자 외곽선(굵기 보정)
     rpr += solidFill(color);
     if (glow) rpr += `<a:effectLst><a:glow rad="${Math.max(12700, emu(glow.radius || 2.5))}">${`<a:srgbClr val="${hex6(glow.color || '#000000')}"><a:alpha val="${alphaPct(glow.alpha ?? 0.7)}"/></a:srgbClr>`}</a:glow></a:effectLst>`;
-    rpr += `<a:latin typeface="${FONT}"/><a:ea typeface="${FONT}"/></a:rPr>`;
+    const face = TW.weight <= 300 ? FONT_LIGHT : FONT; // 가는 글꼴 설정이면 맑은 고딕 Semilight
+    rpr += `<a:latin typeface="${face}"/><a:ea typeface="${face}"/></a:rPr>`;
     const paras = lines.map((l) => `<a:p><a:pPr algn="${align}"><a:lnSpc><a:spcPct val="100000"/></a:lnSpc></a:pPr><a:r>${rpr}<a:t>${esc(l)}</a:t></a:r></a:p>`).join('');
     const ins = `lIns="${emu(padX)}" tIns="${emu(padY)}" rIns="${emu(padX)}" bIns="${emu(padY)}"`;
     return `<p:sp><p:nvSpPr><p:cNvPr id="${id()}" name="${esc(name)}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr>${xfrm(emu(x), emu(y), emu(bw), emu(bh), rot)}<a:prstGeom prst="${geom}"><a:avLst>${rounded ? '<a:gd name="adj" fmla="val 22000"/>' : ''}</a:avLst></a:prstGeom>${bg ? solidFill(bg, bgAlpha) : '<a:noFill/>'}${border ? lineXml(border, 0.8) : '<a:ln><a:noFill/></a:ln>'}</p:spPr><p:txBody><a:bodyPr wrap="none" ${ins} anchor="ctr" anchorCtr="1" rtlCol="0"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paras}</p:txBody></p:sp>`;
@@ -251,7 +253,6 @@ export async function buildPPTX(scene, opts) {
       const [ax, ay] = P(p.anchor.lat, p.anchor.lng);
       const kind = POI_KINDS[p.kind] || POI_KINDS.company;
       const color = p.color || kind.color;
-      if (Math.hypot(ax - x, ay - y) > 14) shapes.push(prst(`${p.name} 위치점`, 'ellipse', emu(ax - 2.2), emu(ay - 2.2), emu(4.4), emu(4.4), { fill: color, line: '#000000', lineWidth: 0.8, lineAlpha: 0.7 }));
       if (st.labelMode === 'box') shapes.push(textbox(`라벨 ${p.name}`, p.name, x, y, st.poiFontSize * fs, { color, bg: '#000000', bgAlpha: 0.6, rounded: true, padX: 5, padY: 2.5 }));
       else shapes.push(textbox(`라벨 ${p.name}`, p.name, x, y, st.poiFontSize * fs, { color, glow: { radius: 2.5, alpha: 0.75 } }));
     }
