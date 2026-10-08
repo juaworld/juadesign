@@ -1,4 +1,4 @@
-// 경량 슬리피 맵 엔진 (외부 의존성 없음): 타일 표시, 팬/줌, 오버레이 SVG 컨테이너
+// 경량 슬리피 맵 엔진 (외부 의존성 없음): 타일 표시, 팬/줄, 오버레이 SVG 컨테이너
 import { TILE, project, unproject, metersPerPixel } from '../core/geo.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -210,8 +210,9 @@ export class SlippyMap {
   _bindInteractions() {
     const el = this.el;
     let drag = null;
+    const own = (e) => (e.target.closest && e.target.closest('.smap')) === el; // 중첩된 지도(인셋) 이벤트 무시
     el.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || !own(e)) return;
       drag = { x: e.clientX, y: e.clientY, moved: false, id: e.pointerId };
       el.setPointerCapture(e.pointerId);
       el.classList.add('dragging');
@@ -240,6 +241,7 @@ export class SlippyMap {
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
     el.addEventListener('wheel', (e) => {
+      if (!own(e)) return;
       e.preventDefault();
       const r = el.getBoundingClientRect();
       let dz = -e.deltaY * (e.deltaMode === 1 ? 0.06 : 0.0028);
@@ -247,12 +249,14 @@ export class SlippyMap {
       this.zoomAround(e.clientX - r.left, e.clientY - r.top, dz);
     }, { passive: false });
     el.addEventListener('dblclick', (e) => {
+      if (!own(e)) return;
       const r = el.getBoundingClientRect();
       const px = e.clientX - r.left, py = e.clientY - r.top;
       this.emit('dblclick', { ...this.containerToLatLng(px, py), px, py, originalEvent: e });
       if (this.dblclickZoom) this.zoomAround(px, py, 1);
     });
     el.addEventListener('contextmenu', (e) => {
+      if (!own(e)) return;
       e.preventDefault();
       const r = el.getBoundingClientRect();
       const px = e.clientX - r.left, py = e.clientY - r.top;
