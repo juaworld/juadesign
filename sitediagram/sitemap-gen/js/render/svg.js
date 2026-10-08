@@ -51,7 +51,7 @@ function pathFromLines(segments, P) {
 
 /**
  * 글자 굵기 설정(style.textWeight, 1~10) → font-weight + 보정 외곽선 두께(em).
- * 10 = 굵게(700). 그보다 작으면 보통(400) 글자에 글자색 외곽선을 얇게 더해 중간 굵기를 만든다
+ * 10 = 굵게(700). 6~10은 보통(400), 6 이하는 가는(300) 글꼴에 글자색 외곽선을 얇게 더해 사이 굵기를 만든다
  * (맑은 고딕처럼 중간 굵기 폰트가 없는 환경에서도 PC마다 같은 두께로 보이게 하기 위함).
  * 세로획 기준: 굵게 ≈ 0.14em, 보통 ≈ 0.085em → 목표 두께 = 0.14em × (설정/10)
  */
@@ -60,8 +60,10 @@ export function textWeight(st, base = 700) {
   const raw = st && st.textWeight != null && st.textWeight !== '' ? Number(st.textWeight) : 10;
   const t = Number.isFinite(raw) ? Math.min(10, Math.max(1, raw)) : 10;
   if (t >= 10) return { weight: base, boost: 0 };
-  const stem = 0.14 * (t / 10);
-  if (stem >= 0.085) return { weight: 400, boost: stem - 0.085 };
+  const stem = 0.14 * (t / 10); // 목표 세로획(em): 굵게 0.14 · 보통 0.085 · 가늘게(Light/Semilight) 0.055
+  const b = (base, w) => ({ weight: w, boost: stem - base < 0.004 ? 0 : stem - base }); // 0.004em 미만 보정은 생략
+  if (stem >= 0.085) return b(0.085, 400);
+  if (stem >= 0.055) return b(0.055, 300);
   return { weight: 300, boost: 0 };
 }
 
@@ -297,11 +299,8 @@ export function renderOverlay(scene, ctx) {
       const { w, h } = textBlockSize(poi.name, size, TW.weight, TW.boost);
       const id = `poi:${poi.id}`;
       let g = `<g${dragAttrs(ctx, id, x, y)}>`;
-      const dist = Math.hypot(ax - x, ay - y);
-      if (dist > 14 * k) {
-        g += `<circle cx="${f1(ax)}" cy="${f1(ay)}" r="${f1(2.2 * k)}" fill="${color}" stroke="rgba(0,0,0,0.7)" stroke-width="${f1(k)}" pointer-events="none"/>`;
-        if (st.poiLeader) g += `<line x1="${f1(ax)}" y1="${f1(ay)}" x2="${f1(x)}" y2="${f1(y)}" stroke="rgba(255,255,255,0.6)" stroke-width="${f1(0.8 * k)}" pointer-events="none"/>`;
-      }
+      // 건물 위치점(작은 원)은 표시하지 않음 — 라벨만. (옵션 poiLeader가 켜진 경우에만 지시선)
+      if (st.poiLeader && Math.hypot(ax - x, ay - y) > 14 * k) g += `<line x1="${f1(ax)}" y1="${f1(ay)}" x2="${f1(x)}" y2="${f1(y)}" stroke="rgba(255,255,255,0.6)" stroke-width="${f1(0.8 * k)}" pointer-events="none"/>`;
       g += selBox(ctx, id, x, y, w, h, k);
       let bw = w + 4 * k, bh = h + 2 * k;
       if (st.labelMode === 'box') {
