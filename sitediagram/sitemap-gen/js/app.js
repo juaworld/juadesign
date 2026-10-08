@@ -1,5 +1,5 @@
 // SiteDiagram 메인 애플리케이션
-import { defaultScene, loadSceneLocal, saveSceneLocal, sceneToJSON, sceneFromJSON, uid, maxRingRadius, siteCenter, POI_KINDS, ROAD_PALETTE } from './core/scene.js';
+import { defaultScene, normalizeScene, loadSceneLocal, saveSceneLocal, sceneToJSON, sceneFromJSON, uid, maxRingRadius, siteCenter, POI_KINDS, ROAD_PALETTE, defaultStyle } from './core/scene.js';
 import { haversine, bboxAround, expandBbox, inBbox, lineLength, polygonCentroid, bboxOfCoords, bboxIntersects, lngOffset } from './core/geo.js';
 import { placePointLabels, lineLabelCandidates, rotatedBox, rectsOverlap } from './core/labels.js';
 import { LiveView } from './map/view.js';
@@ -15,6 +15,7 @@ import * as kakao from './sources/kakao.js';
 import { initUI } from './ui/sidebar.js';
 
 const KEYS_STORAGE = 'sitediagram.keys.v1';
+const PRESETS_STORAGE = 'sitediagram.presets.v1';
 const $ = (s) => document.querySelector(s);
 
 function normName(s) {
@@ -31,6 +32,10 @@ export class App {
     this.selectedId = null;
     this.draft = null;
     this.busy = false;
+    this._undo = [];
+    this._redo = [];
+    this._lastSnap = JSON.stringify(this.scene);
+    this._lastPush = 0;
     this.view = new LiveView(this, $('#map'), $('#inset'));
     this.ui = initUI(this);
     window.addEventListener('resize', () => this.view.applyAspect());
@@ -87,9 +92,146 @@ export class App {
 
   // ---------- 상태 변경 공통 ----------
   commit(opts = {}) {
+    this._recordUndo();
     saveSceneLocal(this.scene);
     if (opts.render !== false) this.view.renderOverlay();
     if (opts.ui !== false) this.ui.refreshLists();
+  }
+
+  /** 되돌리기 스택 기록 (700ms 안에 연속된 변경은 한 단계로 묶음) */
+  _recordUndo() {
+    const snap = JSON.stringify(this.scene);
+    if (snap === this._lastSnap) return;
+    const now = Date.now();
+    if (now - this._lastPush > 700) {
+      this._undo.push(this._lastSnap);
+      if (this._undo.length > 60) this._undo.shift();
+      this._redo = [];
+    }
+    this._lastPush = now;
+    this._lastSnap = snap;
+    this.ui.updateUndo && this.ui.updateUndo();
+  }
+
+  undo() {
+    if (!this._undo.length) return;
+    this._redo.push(JSON.stringify(this.scene));
+    const prev = this._undo.pop();
+    this._applySnapshot(prev);
+    this.log(`되돌리기 (남은 ${this._undo.length}단계)`);
+  }
+
+  redo() {
+    if (!this._redo.length) return;
+    this._undo.push(JSON.stringify(this.scene));
+    const next = this._redo.pop();
+    this._applySnapshot(next);
+    this.log('다시 실행');
+  }
+
+  _applySnapshot(json) {
+    const s = normalizeScene(JSON.parse(json));
+    // 화면 위치는 현재 상태 유지
+    s.view.center = { ...this.view.map.center };
+    s.view.zoom = this.view.map.zoom;
+    this.scene = s;
+    this._lastSnap = JSON.stringify(s);
+    this._lastPush = 0;
+    this.selectedId = null;
+    saveSceneLocal(this.scene);
+    this.view.applyBase();
+    this.view.applyFilter();
+    this.view.applyAspect();
+    this.view.renderOverlay();
+    this.ui.refreshAll();
+  }
+
+  // ---------- 설정 프리셋 (스타일·반경·인셋·프레임·데이터 옵션) ----------
+  loadPresets() {
+    try { return JSON.parse(localStorage.getItem(PRESETS_STORAGE) || '[]'); } catch (e) { return []; }
+  }
+
+  _savePresets(list) {
+    try { localStorage.setItem(PRESETS_STORAGE, JSON.stringify(list)); } catch (e) { this.log('프리셋 저장 실패 (저장공간)'); }
+  }
+
+  presetData() {
+    const sc = this.scene;
+    return {
+      style: JSON.parse(JSON.stringify(sc.style)),
+      rings: sc.rings.map((r) => ({ radius: r.radius, label: r.label, visible: r.visible !== false })),
+      inset: JSON.parse(JSON.stringify({ ...sc.inset, center: undefined })),
+      aspect: sc.view.aspect,
+      sources: JSON.parse(JSON.stringify(sc.sources)),
+    };
+  }
+
+  savePreset(name) {
+    const nm = (name || '').trim();
+    if (!nm) return;
+    const list = this.loadPresets().filter((p) => p.name !== nm);
+    list.push({ name: nm, created: Date.now(), data: this.presetData() });
+    this._savePresets(list);
+    this.log(`프리셋 저장: ${nm}`);
+    this.ui.refreshPresets && this.ui.refreshPresets(nm);
+  }
+
+  applyPreset(name) {
+    const p = this.loadPresets().find((x) => x.name === name);
+    if (!p) return;
+    const d = p.data || {};
+    const sc = this.scene;
+    if (d.style) sc.style = { ...defaultStyle(), ...d.style };
+    if (Array.isArray(d.rings)) sc.rings = d.rings.map((r) => ({ id: uid('r'), radius: r.radius, label: r.label || '', visible: r.visible !== false }));
+    if (d.inset) sc.inset = { ...sc.inset, ...d.inset, center: sc.inset.center };
+    if (d.aspect) sc.view.aspect = d.aspect;
+    if (d.sources) sc.sources = { ...sc.sources, ...d.sources };
+    this.view.applyBase();
+    this.view.applyFilter();
+    this.view.applyAspect();
+    this.relocateForInset();
+    this.commit();
+    this.ui.refreshAll();
+    this.log(`프리셋 적용: ${name}`);
+  }
+
+  deletePreset(name) {
+    const list = this.loadPresets().filter((p) => p.name !== name);
+    this._savePresets(list);
+    this.log(`프리셋 삭제: ${name}`);
+    this.ui.refreshPresets && this.ui.refreshPresets();
+  }
+
+  resetStyle() {
+    const d = defaultScene();
+    this.scene.style = d.style;
+    this.scene.rings = d.rings;
+    this.scene.inset = { ...d.inset };
+    this.scene.view.aspect = d.view.aspect;
+    this.view.applyBase();
+    this.view.applyFilter();
+    this.view.applyAspect();
+    this.commit();
+    this.ui.refreshAll();
+    this.log('스타일·반경·인셋을 기본값으로 되돌렸습니다.');
+  }
+
+  exportPresets() {
+    downloadBlob(new Blob([JSON.stringify(this.loadPresets(), null, 2)], { type: 'application/json' }), 'sitediagram-presets.json');
+  }
+
+  async importPresets(file) {
+    try {
+      const arr = JSON.parse(await file.text());
+      if (!Array.isArray(arr)) throw new Error('형식 오류');
+      const list = this.loadPresets();
+      for (const p of arr) if (p && p.name && p.data) { const i = list.findIndex((x) => x.name === p.name); if (i >= 0) list[i] = p; else list.push(p); }
+      this._savePresets(list);
+      this.ui.refreshPresets && this.ui.refreshPresets();
+      this.log(`프리셋 ${arr.length}개 가져옴`);
+    } catch (e) {
+      this.log(`프리셋 가져오기 실패: ${e.message}`);
+    }
   }
 
   onViewChanged() {
