@@ -167,8 +167,46 @@ def main():
         state2 = page.evaluate("() => ({ pois: window.__app.scene.pois.length, name: window.__app.scene.meta.name })")
         print("ROUNDTRIP:", state2)
 
+        # 되돌리기 / 프리셋 / 인셋 줌
+        n_before = page.evaluate("window.__app.scene.pois.length")
+        page.evaluate("window.__app.scene.pois.pop(); window.__app.commit()")
+        page.keyboard.press("Control+z")
+        time.sleep(0.3)
+        n_after = page.evaluate("window.__app.scene.pois.length")
+        print("UNDO restored:", n_before == n_after, n_before, n_after)
+        page.evaluate("window.__app.savePreset('테스트 프리셋')")
+        page.evaluate("window.__app.scene.style.brightness = 0.3; window.__app.commit()")
+        page.evaluate("window.__app.applyPreset('테스트 프리셋')")
+        print("PRESET applied brightness:", page.evaluate("window.__app.scene.style.brightness"))
+        ib = page.locator("#inset").bounding_box()
+        z0 = page.evaluate("window.__app.scene.inset.zoom")
+        page.mouse.move(ib["x"] + ib["width"] / 2, ib["y"] + ib["height"] / 2)
+        page.mouse.wheel(0, -300)
+        time.sleep(0.5)
+        z1 = page.evaluate("window.__app.scene.inset.zoom")
+        print("INSET wheel zoom:", z0, "->", z1)
+        page.evaluate("const a = window.__app.scene.areas.find(x=>x.kind==='industrial'); if (a) { a.width = 6; window.__app.commit(); }")
+        sw = page.evaluate("(() => { const p = document.querySelector('#map .smap-overlay path[stroke-dasharray]'); return p && p.getAttribute('stroke-width'); })()")
+        print("AREA width applied (first dashed path stroke-width):", sw)
+
         # 스타일 변경 & 재배치
         page.click(".step[data-step='5'] h2")
+        # 글자 굵기 (기본 7.6 → 보통 글자 + 보정 외곽선, 10 → 굵게)
+        tw = page.evaluate("""() => {
+          const t = Array.from(document.querySelectorAll('#map .smap-overlay text')).find(e => e.getAttribute('fill') === '#FFFFFF' && !/SITE/.test(e.textContent));
+          return t && { weight: t.getAttribute('font-weight'), stroke: t.getAttribute('stroke'), sw: t.getAttribute('stroke-width'), slider: document.querySelector('#textWeight').value };
+        }""")
+        print("TEXT WEIGHT default:", tw)
+        assert tw and tw["weight"] == "400" and tw["stroke"] == "#FFFFFF", "글자 굵기 기본값(7.6) 렌더 오류"
+        page.fill("#textWeight", "10"); page.dispatch_event("#textWeight", "input")
+        tw10 = page.evaluate("""() => {
+          const t = Array.from(document.querySelectorAll('#map .smap-overlay text')).find(e => e.getAttribute('fill') === '#FFFFFF' && !/SITE/.test(e.textContent));
+          return t && { weight: t.getAttribute('font-weight'), po: t.getAttribute('paint-order') };
+        }""")
+        print("TEXT WEIGHT 10:", tw10)
+        assert tw10 and tw10["weight"] == "700", "글자 굵기 10 렌더 오류"
+        page.fill("#textWeight", "7.6"); page.dispatch_event("#textWeight", "input")
+
         page.fill("#fontScale", "1.3"); page.dispatch_event("#fontScale", "input")
         page.select_option("#labelMode", "box")
         time.sleep(0.4)
