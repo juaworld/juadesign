@@ -187,14 +187,11 @@ export function buildDXF(scene, opts) {
   // POI
   if (st.showPoiLabels) {
     const lab = d.layer('POI_LABEL', 7);
-    const anc = d.layer('POI_ANCHOR', 8);
     for (const p of scene.pois) {
       if (p.visible === false) continue;
       const [lat, lng] = poiLabelLatLng(p);
       const [x, y] = T(lat, lng);
       d.text(lab, x, y, st.poiFontSize * fs * mpp, p.name);
-      const [ax, ay] = T(p.anchor.lat, p.anchor.lng);
-      if (Math.hypot(ax - x, ay - y) > 14 * mpp) d.circle(anc, ax, ay, 2 * mpp);
     }
   }
 
