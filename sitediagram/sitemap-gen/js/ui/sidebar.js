@@ -26,6 +26,25 @@ export function initUI(app) {
   // ---------- 상단바 ----------
   $('#projectName').addEventListener('change', (e) => { scene().meta.name = e.target.value.trim() || '대지분석도'; app.commit({ render: false, ui: false }); });
   $('#btnNew').addEventListener('click', () => app.newProject());
+  $('#btnUndo').addEventListener('click', () => app.undo());
+  $('#btnRedo').addEventListener('click', () => app.redo());
+  // 프리셋
+  $('#btnPresetSave').addEventListener('click', () => {
+    const cur = $('#presetSelect').value;
+    const name = prompt('프리셋 이름', cur || '기본 스타일');
+    if (name && name.trim()) app.savePreset(name.trim());
+  });
+  $('#btnPresetApply').addEventListener('click', () => { const v = $('#presetSelect').value; if (v) app.applyPreset(v); else log('적용할 프리셋을 먼저 선택하세요'); });
+  $('#presetSelect').addEventListener('change', (e) => { if (e.target.value) app.applyPreset(e.target.value); });
+  $('#btnPresetDelete').addEventListener('click', () => { const v = $('#presetSelect').value; if (v && confirm(`프리셋 "${v}"을(를) 삭제할까요?`)) app.deletePreset(v); });
+  $('#btnPresetReset').addEventListener('click', () => { if (confirm('스타일·반경·인셋 설정을 기본값으로 되돌릴까요? (데이터는 유지)')) app.resetStyle(); });
+  $('#btnPresetExport').addEventListener('click', () => app.exportPresets());
+  $('#filePresetImport').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) app.importPresets(f); e.target.value = ''; });
+  // 인셋 컨트롤
+  $('#btnInsetReset').addEventListener('click', () => { scene().inset.center = null; app.commit({ ui: false }); syncInset(); });
+  $('#insetBtnIn').addEventListener('click', (e) => { e.stopPropagation(); const m = app.view.inset; const [w, h] = m.getSize(); m.zoomAround(w / 2, h / 2, 0.5); });
+  $('#insetBtnOut').addEventListener('click', (e) => { e.stopPropagation(); const m = app.view.inset; const [w, h] = m.getSize(); m.zoomAround(w / 2, h / 2, -0.5); });
+  $('.inset-controls').addEventListener('pointerdown', (e) => e.stopPropagation());
   $('#btnSaveProject').addEventListener('click', () => app.saveProject());
   $('#fileLoadProject').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) app.loadProjectFile(f); e.target.value = ''; });
   const dlg = $('#settingsDialog');
@@ -145,6 +164,7 @@ export function initUI(app) {
   bindStyle('#brightness', 'brightness', parseFloat, '#brightnessOut', pct, () => app.view.applyFilter());
   bindStyle('#contrast', 'contrast', parseFloat, '#contrastOut', pct, () => app.view.applyFilter());
   bindStyle('#fontScale', 'fontScale', parseFloat, '#fontScaleOut', pct);
+  bindStyle('#textWeight', 'textWeight', parseFloat, '#textWeightOut', (v) => Number(v).toFixed(1));
   bindStyle('#roadWidth', 'roadWidth', parseFloat, '#roadWidthOut', (v) => v);
   bindStyle('#labelMode', 'labelMode', (v) => v);
   bindStyle('#veil', 'veil', (v) => !!v);
@@ -179,6 +199,8 @@ export function initUI(app) {
   document.addEventListener('keydown', (e) => {
     const tag = (e.target.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); app.undo(); return; }
+    if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); app.redo(); return; }
     if (e.key === 'Escape') { if (app.mode !== 'pan') app.setMode(app.mode); else app.select(null); }
     if ((e.key === 'Delete' || e.key === 'Backspace') && app.selectedId) { e.preventDefault(); app.deleteSelected(); }
   });
@@ -322,14 +344,17 @@ export function initUI(app) {
       const list = s.areas.filter((a) => match(a.name) || match(AREA_KINDS[a.kind]?.label));
       if (!list.length) ul.appendChild(li('<span class="empty">③에서 구역을 불러오세요</span>'));
       for (const a of list) {
+        const defW = a.kind === 'industrial' ? 2.5 : a.kind === 'park' ? 1 : a.kind === 'water' ? 0 : 2;
         const el = li(`<input type="checkbox" ${a.visible !== false ? 'checked' : ''}>
           <span class="name" title="${esc(a.name)}">${esc(a.name || '(이름 없음)')}</span>
+          <input type="number" class="w" value="${a.width != null && a.width !== '' ? a.width : defW}" min="0" max="12" step="0.5" title="선 두께(px)" style="width:58px">
           <select title="종류">${Object.entries(AREA_KINDS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}</select>
           <button class="icon-btn" title="삭제">✕</button>`);
         el.dataset.id = `area:${a.id}`;
         if (app.selectedId === el.dataset.id) el.classList.add('selected');
         el.querySelector('select').value = a.kind;
-        el.querySelector('input').addEventListener('change', (e) => { a.visible = e.target.checked; app.commit(); });
+        el.querySelector('input[type=checkbox]').addEventListener('change', (e) => { a.visible = e.target.checked; app.commit(); });
+        el.querySelector('input.w').addEventListener('change', (e) => { a.width = parseFloat(e.target.value); app.commit({ ui: false }); });
         el.querySelector('select').addEventListener('change', (e) => { a.kind = e.target.value; app.commit(); });
         el.querySelector('.name').addEventListener('click', () => app.select(`area:${a.id}`));
         el.querySelector('.name').addEventListener('dblclick', () => app.editLabel(`area:${a.id}`));
@@ -362,6 +387,28 @@ export function initUI(app) {
   function highlightSelected() {
     $$('#layerList li').forEach((el) => el.classList.toggle('selected', el.dataset.id === app.selectedId));
   }
+
+  function refreshPresets(selectName) {
+    const sel = $('#presetSelect');
+    const cur = selectName != null ? selectName : sel.value;
+    sel.innerHTML = '<option value="">(저장된 프리셋 선택)</option>';
+    for (const p of app.loadPresets()) {
+      const o = document.createElement('option');
+      o.value = p.name; o.textContent = p.name;
+      sel.appendChild(o);
+    }
+    sel.value = cur && app.loadPresets().some((p) => p.name === cur) ? cur : '';
+  }
+
+  function syncInset() {
+    const s = scene();
+    $('#insetZoom').value = s.inset.zoom; $('#insetZoomOut').value = Number(s.inset.zoom).toFixed(1);
+  }
+
+  function updateUndo() {
+    $('#btnUndo').disabled = !app._undo.length;
+    $('#btnRedo').disabled = !app._redo.length;
+  }
   function refreshLists() { refreshListsBase(); updateSuppressed(); }
 
   /** 씬 값 → 입력 위젯 동기화 */
@@ -393,6 +440,7 @@ export function initUI(app) {
     $('#brightness').value = st.brightness; $('#brightnessOut').value = pct(st.brightness);
     $('#contrast').value = st.contrast; $('#contrastOut').value = pct(st.contrast);
     $('#fontScale').value = st.fontScale; $('#fontScaleOut').value = pct(st.fontScale);
+    $('#textWeight').value = st.textWeight ?? 10; $('#textWeightOut').value = Number(st.textWeight ?? 10).toFixed(1);
     $('#roadWidth').value = st.roadWidth; $('#roadWidthOut').value = st.roadWidth;
     $('#labelMode').value = st.labelMode;
     $('#veil').checked = st.veil !== false;
@@ -403,8 +451,10 @@ export function initUI(app) {
     updateMode();
     updateStatus();
     updateAttribution();
+    refreshPresets();
+    updateUndo();
     refreshLists();
   }
 
-  return { log, updateMode, updateStatus, setBusy, progress, refreshLists, refreshAll, highlightSelected, updateSuppressed };
+  return { log, updateMode, updateStatus, setBusy, progress, refreshLists, refreshAll, highlightSelected, updateSuppressed, refreshPresets, syncInset, updateUndo };
 }
