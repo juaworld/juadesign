@@ -70,7 +70,7 @@ export class LiveView {
   }
 
   _onMapRender() {
-    // 팬/줄 도중: 마지막 렌더 기준 변환으로 즉시 반응, 끝나면 재렌더
+    // 팬/줌 도중: 마지막 렌더 기준 변환으로 즉시 반응, 끝나면 재렌더
     const rs = this.renderState;
     if (!rs) { this.renderOverlay(); return; }
     const [w, h] = this.map.getSize();
@@ -111,6 +111,7 @@ export class LiveView {
     const sc = this.app.scene;
     const [W] = this.map.getSize();
     const [, H] = this.map.getSize();
+    this.mapEl.dataset.insetPos = sc.inset.enabled ? (sc.inset.pos || 'tl') : '';
     if (!sc.inset.enabled || !W) { this.insetEl.style.display = 'none'; return; }
     const ir = insetRect(sc, W, H, 1);
     this.insetEl.style.display = '';
@@ -207,7 +208,7 @@ export class LiveView {
     this.map.setView(c, zoom ?? this.map.zoom);
   }
 
-  /** 가장 큰 반경이 프레임에 들어오는 줄 계산 */
+  /** 가장 큰 반경이 프레임에 들어오는 줌 계산 */
   fitRadius(radiusM, padding = 1.15) {
     const [w, h] = this.map.getSize();
     const c = this.app.scene.site.center || this.app.scene.view.center;
