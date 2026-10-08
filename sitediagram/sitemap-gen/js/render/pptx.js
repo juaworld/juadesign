@@ -1,7 +1,7 @@
 // PPTX 작성기 — 항공사진은 그림, 도형·라벨은 편집 가능한 PowerPoint 개체로 내보내기 (외부 라이브러리 없음)
 import { buildZip, dataUrlToBytes } from '../core/zip.js';
 import { lngOffset, normalizeAngleDeg } from '../core/geo.js';
-import { textBlockSize, areaStyle, roadStroke, roadLabelColors, areaLabelAnchor, poiLabelLatLng, renderOverlay, esc } from './svg.js';
+import { textBlockSize, textWeight, areaStyle, roadStroke, roadLabelColors, areaLabelAnchor, poiLabelLatLng, renderOverlay, esc } from './svg.js';
 import { measureText } from '../core/labels.js';
 import { POI_KINDS, siteCenter } from '../core/scene.js';
 import { insetRect, insetCenter } from './layout.js';
@@ -31,6 +31,7 @@ export async function buildPPTX(scene, opts) {
   const P = makeProjector(opts.center, opts.zoom, w, h, 1);
   const st = scene.style;
   const fs = st.fontScale || 1;
+  const TWg = textWeight(st); // 글자 굵기 설정(측정용)
   const center = siteCenter(scene);
   let nextId = 2;
   const id = () => nextId++;
@@ -82,15 +83,19 @@ export async function buildPPTX(scene, opts) {
   }
 
   /** 텍스트 상자: (cx,cy) 중심 px, fontPx, 옵션 */
-  function textbox(name, text, cxPx, cyPx, fontPx, { color = '#FFFFFF', bold = true, bg = null, bgAlpha = 1, glow = null, rot = 0, padX = 3, padY = 1.5, rounded = false, align = 'ctr', anchorLeft = false, border = null } = {}) {
+  function textbox(name, text, cxPx, cyPx, fontPx, { color = '#FFFFFF', bold = true, heavy = false, bg = null, bgAlpha = 1, glow = null, rot = 0, padX = 3, padY = 1.5, rounded = false, align = 'ctr', anchorLeft = false, border = null } = {}) {
     const lines = String(text).split('\n').filter((l) => l.length);
     if (!lines.length) return '';
-    const { w: tw, h: th } = textBlockSize(text, fontPx);
+    // 글자 굵기 설정: 10=굵게, 그 외 보통 글자 + 글자색 외곽선(미리보기와 동일한 두께 보정)
+    const TW = heavy ? { weight: 700, boost: 0 } : textWeight(st, bold ? 700 : 400);
+    const { w: tw, h: th } = textBlockSize(text, fontPx, TW.weight, TW.boost);
     const bw = tw + padX * 2, bh = th + padY * 2;
     const x = anchorLeft ? cxPx : cxPx - bw / 2;
     const y = cyPx - bh / 2;
     const geom = rounded ? 'roundRect' : 'rect';
-    let rpr = `<a:rPr lang="ko-KR" altLang="en-US" sz="${fsz(fontPx)}" b="${bold ? 1 : 0}" dirty="0">${solidFill(color)}`;
+    let rpr = `<a:rPr lang="ko-KR" altLang="en-US" sz="${fsz(fontPx)}" b="${TW.weight >= 700 ? 1 : 0}" dirty="0">`;
+    if (TW.boost > 0) rpr += `<a:ln w="${Math.max(635, Math.round(TW.boost * fontPx * PT * 12700))}">${solidFill(color)}</a:ln>`; // 글자 외곽선(굵기 보정)
+    rpr += solidFill(color);
     if (glow) rpr += `<a:effectLst><a:glow rad="${Math.max(12700, emu(glow.radius || 2.5))}">${`<a:srgbClr val="${hex6(glow.color || '#000000')}"><a:alpha val="${alphaPct(glow.alpha ?? 0.7)}"/></a:srgbClr>`}</a:glow></a:effectLst>`;
     rpr += `<a:latin typeface="${FONT}"/><a:ea typeface="${FONT}"/></a:rPr>`;
     const paras = lines.map((l) => `<a:p><a:pPr algn="${align}"><a:lnSpc><a:spcPct val="100000"/></a:lnSpc></a:pPr><a:r>${rpr}<a:t>${esc(l)}</a:t></a:r></a:p>`).join('');
@@ -186,12 +191,12 @@ export async function buildPPTX(scene, opts) {
       const [x, y] = IP(scene.site.center.lat, scene.site.center.lng);
       const ps = scene.inset.mode === 'detail' ? 0.75 : 0.9;
       children.push(pin(x, y, ps, st.siteColor));
-      children.push(textbox('인셋 SITE', 'SITE', x + 13 * ps, y - 20 * ps, 13 * ps, { color: st.siteColor, glow: { radius: 2.2, color: '#FFFFFF', alpha: 0.95 }, anchorLeft: true }));
+      children.push(textbox('인셋 SITE', 'SITE', x + 13 * ps, y - 20 * ps, 13 * ps, { color: st.siteColor, heavy: true, glow: { radius: 2.2, color: '#FFFFFF', alpha: 0.95 }, anchorLeft: true }));
     }
-    const title = scene.inset.title || scene.site.name || '';
+    const title = (scene.inset.title || '').trim();
     const tf = 11 * fs;
     if (title) {
-      const { w: tw, h: th } = textBlockSize(title, tf);
+      const { w: tw, h: th } = textBlockSize(title, tf, TWg.weight, TWg.boost);
       children.push(textbox('인셋 제목', title, ir.x + 6 + (tw + 14) / 2, ir.y + 6 + (th + 6) / 2, tf, { color: '#FFFFFF', bg: '#000000', bgAlpha: 0.75, padX: 7, padY: 3 }));
     }
     if (scene.inset.legend && scene.site.parcels.length) {
@@ -202,7 +207,7 @@ export async function buildPPTX(scene, opts) {
       if (groups.has('site')) items.push({ label: '대지', fill: st.siteColor, fa: 0.5, dash: null });
       const lh = tf * 1.6, sw = 18, sh = tf * 0.95;
       let maxW = 0;
-      for (const it of items) maxW = Math.max(maxW, measureText(it.label, tf * 0.95, 700));
+      for (const it of items) maxW = Math.max(maxW, measureText(it.label, tf * 0.95, TWg.weight) + TWg.boost * tf * 0.95);
       const bw = sw + maxW + 22, bh = items.length * lh + 8;
       const bx = ir.x + ir.w - bw - 6, by = ir.y + ir.h - bh - 6;
       children.push(prst('인셋 범례 배경', 'rect', emu(bx), emu(by), emu(bw), emu(bh), { fill: '#000000', fillAlpha: 0.65 }));
@@ -258,7 +263,7 @@ export async function buildPPTX(scene, opts) {
     if (scene.site.pinVisible !== false) {
       const ps = (size / 20) * 1.1;
       shapes.push(pin(x, y, ps, st.siteColor));
-      shapes.push(textbox('SITE', 'SITE', x + 14 * ps, y - 20 * ps, size, { color: st.siteColor, glow: { radius: 3, color: '#FFFFFF', alpha: 0.95 }, anchorLeft: true }));
+      shapes.push(textbox('SITE', 'SITE', x + 14 * ps, y - 20 * ps, size, { color: st.siteColor, heavy: true, glow: { radius: 3, color: '#FFFFFF', alpha: 0.95 }, anchorLeft: true }));
     }
     if (scene.site.name && scene.site.label?.visible !== false) {
       const lp = scene.site.label?.pos;
