@@ -39,7 +39,8 @@ export function defaultStyle() {
     veil: true, // 흰색 반투명 레이어(안개)
     veilOpacity: 0.2,
     fontScale: 1,
-    textWeight: 7.6, // 글자 굵기 1~10 (10=굵게, 7.6≈굵게의 3/4)
+    textWeight: 4, // 글자 굵기 1~10 (10=굵게, 6 이하 가는 글꼴)
+    textWeightVer: 2, // 굵기 기본값 변경 이력(저장된 씬 1회 이관용)
     roadWidth: 4,
     roadPalette: ROAD_PALETTE.slice(),
     motorwayColor: '#D0D4D9',
@@ -111,6 +112,7 @@ export function normalizeScene(s) {
   out.pois = Array.isArray(s.pois) ? s.pois : [];
   out.inset = { ...d.inset, ...(s.inset || {}) };
   out.style = { ...d.style, ...(s.style || {}) };
+  if (!(s.style && s.style.textWeightVer >= 2)) { out.style.textWeight = 4; out.style.textWeightVer = 2; } // 구버전 저장분: 글자 굵기 기본값 4로 1회 이관
   out.sources = { ...d.sources, ...(s.sources || {}) };
   out.meta = { ...d.meta, ...(s.meta || {}) };
   return out;
