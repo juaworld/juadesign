@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SiteDiagram — 대지분석도 자동생성</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="js/config.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">◎</span> SiteDiagram <small>대지분석도 자동생성</small></div>
+  <input id="projectName" class="project-name" type="text" placeholder="프로젝트명" title="프로젝트명 (파일명에 사용)">
+  <div class="topbar-actions">
+    <button id="btnNew" class="btn ghost" title="새 프로젝트">새로 만들기</button>
+    <button id="btnSaveProject" class="btn ghost" title="작업 내용을 JSON 파일로 저장">프로젝트 저장</button>
+    <label class="btn ghost" for="fileLoadProject" title="저장한 JSON 불러오기">프로젝트 열기<input id="fileLoadProject" type="file" accept=".json,application/json" hidden></label>
+    <button id="btnSettings" class="btn primary">⚙ API 키 설정</button>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+
+    <section class="step open" data-step="1">
+      <h2><span class="num">1</span> 대지 설정 <span class="chev"></span></h2>
+      <div class="body">
+        <div class="row">
+          <input id="searchQuery" type="text" placeholder="주소·지번·장소명 (예: 충북 충주시 대소원면 첨단산업7로 7)">
+          <button id="btnSearch" class="btn">검색</button>
+        </div>
+        <p class="hint">검색 후 지도가 이동합니다. 대지 중심은 아래 버튼으로 지도에서 클릭해 지정하세요.</p>
+        <div class="row">
+          <button id="modeSite" class="btn mode" data-mode="site">📍 지도 클릭으로 대지 중심 지정</button>
+        </div>
+        <label class="field"><span>대지(SITE) 명칭</span><input id="siteName" type="text" placeholder="예: SBC 리니어"></label>
+        <label class="check"><input id="sitePin" type="checkbox" checked> SITE 핀·문자 표시</label>
+        <label class="check"><input id="siteLabelVisible" type="checkbox" checked> 대지 명칭 박스 표시</label>
+
+        <h3>필지 경계 (브이월드 연속지적도)</h3>
+        <div class="row seg" id="parcelGroup">
+          <button class="seg-btn active" data-group="existing">기존공장</button>
+          <button class="seg-btn" data-group="expansion">증축부지</button>
+          <button class="seg-btn" data-group="site">대지(단일)</button>
+        </div>
+        <div class="row">
+          <button id="modeParcel" class="btn mode" data-mode="parcel">🧩 지도 클릭으로 필지 추가</button>
+        </div>
+        <div class="row">
+          <button id="modeDraw" class="btn mode" data-mode="draw">✏ 직접 그리기</button>
+          <select id="drawTarget" title="그릴 대상">
+            <option value="parcel">필지(선택한 그룹)</option>
+            <option value="industrial">산업단지 경계</option>
+            <option value="park">공원·녹지</option>
+            <option value="custom">사용자 구역</option>
+          </select>
+        </div>
+        <p class="hint">필지 클릭 → 선택한 그룹으로 추가. 직접 그리기: 클릭으로 꼭짓점, 더블클릭으로 완료, 우클릭으로 마지막 점 취소. 산단 경계가 자동으로 안 잡히면 여기서 직접 그리세요.</p>
+        <ul id="parcelList" class="list"></ul>
+      </div>
+    </section>
+
+    <section class="step" data-step="2">
+      <h2><span class="num">2</span> 분석 범위·프레임 <span class="chev"></span></h2>
+      <div class="body">
+        <h3>반경 원</h3>
+        <ul id="ringList" class="list"></ul>
+        <div class="row">
+          <input id="newRingRadius" type="number" placeholder="반경(m)" min="50" step="50" value="250" style="width:110px">
+          <button id="btnAddRing" class="btn">＋ 반경 추가</button>
+        </div>
+        <div class="row">
+          <button id="btnFitRings" class="btn">반경이 다 보이게 맞추기</button>
+          <button id="btnCenterSite" class="btn">대지 중심으로</button>
+        </div>
+        <label class="field"><span>출력 프레임 비율</span>
+          <select id="aspect">
+            <option value="16:9">16:9 (PPT 와이드)</option>
+            <option value="4:3">4:3</option>
+            <option value="3:2">3:2</option>
+            <option value="A3">A3 가로 (√2:1)</option>
+            <option value="1:1">1:1 정사각</option>
+            <option value="free">자유 (창 크기)</option>
+          </select></label>
+        <h3>위치도 인셋</h3>
+        <label class="check"><input id="insetEnabled" type="checkbox" checked> 인셋 표시</label>
+        <div class="grid2">
+          <label class="field"><span>인셋 모드</span>
+            <select id="insetMode"><option value="detail">대지 확대 (기존/증축 표시)</option><option value="wide">광역 위치도</option></select></label>
+          <label class="field"><span>위치</span>
+            <select id="insetPos"><option value="tl">좌상</option><option value="tr">우상</option><option value="bl">좌하</option><option value="br">우하</option></select></label>
+          <label class="field"><span>크기 <output id="insetSizeOut">24%</output></span><input id="insetSize" type="range" min="12" max="40" step="1" value="24"></label>
+          <label class="field"><span>줌 <output id="insetZoomOut">17.6</output></span><input id="insetZoom" type="range" min="11" max="19.5" step="0.1" value="17.6"></label>
+        </div>
+        <label class="field"><span>인셋 제목 (비우면 대지 명칭)</span><input id="insetTitle" type="text" placeholder="예: SBC 리니어"></label>
+        <label class="check"><input id="insetLegend" type="checkbox" checked> 범례(기존공장/증축부지) 표시</label>
+      </div>
+    </section>
+
+    <section class="step" data-step="3">
+      <h2><span class="num">3</span> 주변 데이터 불러오기 <span class="chev"></span></h2>
+      <div class="body">
+        <p class="hint">현재 화면(프레임) 범위를 기준으로 가져옵니다. 먼저 대지·반경·프레임을 맞춘 뒤 실행하세요.</p>
+        <div class="row">
+          <button id="btnLoadAll" class="btn primary wide">⟳ 전체 자동 생성 (도로·구역·기업)</button>
+        </div>
+        <div class="row">
+          <button id="btnLoadRoads" class="btn">도로·철도·하천</button>
+          <button id="btnLoadAreas" class="btn">공원·산단 경계</button>
+          <button id="btnLoadPois" class="btn">주변 기업·시설</button>
+        </div>
+        <details>
+          <summary>데이터 소스 옵션</summary>
+          <label class="check"><input id="srcKakao" type="checkbox" checked> 카카오 장소검색 (기업명 — 권장)</label>
+          <label class="field"><span>카카오 검색 키워드 (쉼표 구분)</span><input id="kakaoKeywords" type="text"></label>
+          <label class="field"><span>제외 카테고리 코드 (음식점 FD6, 카페 CE7 …)</span><input id="excludeCategories" type="text"></label>
+          <label class="check"><input id="srcOsm" type="checkbox" checked> OSM 건물명·시설</label>
+          <label class="check"><input id="srcVworldBld" type="checkbox"> 브이월드 도로명주소 건물명 (느림)</label>
+          <label class="field"><span>표시할 최대 기업·시설 수</span><input id="maxPois" type="number" min="5" max="200" value="40"></label>
+          <label class="field"><span>이름 없는 소로 숨김 기준 길이(m)</span><input id="minRoadLength" type="number" min="0" step="50" value="250"></label>
+        </details>
+        <pre id="log" class="log"></pre>
+      </div>
+    </section>
+
+    <section class="step" data-step="4">
+      <h2><span class="num">4</span> 레이어·라벨 편집 <span class="chev"></span></h2>
+      <div class="body">
+        <p class="hint">지도에서 라벨을 <b>드래그</b>해 옮기고, <b>더블클릭</b>으로 이름 수정, <b>우클릭</b>으로 숨김. 목록의 체크로 표시/숨김.</p>
+        <div class="row">
+          <button id="btnAutoLabels" class="btn">라벨 자동 재배치</button>
+          <button id="modePoi" class="btn mode" data-mode="poi">＋ 라벨 직접 추가(지도 클릭)</button>
+        </div>
+        <div class="tabs" id="layerTabs">
+          <button class="tab active" data-tab="pois">기업·시설 <span id="cntPois" class="cnt"></span></button>
+          <button class="tab" data-tab="roads">도로 <span id="cntRoads" class="cnt"></span></button>
+          <button class="tab" data-tab="areas">구역 <span id="cntAreas" class="cnt"></span></button>
+        </div>
+        <p class="hint" id="suppressedInfo"></p>
+        <div class="row small">
+          <input id="layerFilter" type="text" placeholder="목록 검색…">
+          <button id="btnShowAll" class="btn sm">모두 표시</button>
+          <button id="btnHideAll" class="btn sm">모두 숨김</button>
+        </div>
+        <ul id="layerList" class="list tall"></ul>
+      </div>
+    </section>
+
+    <section class="step" data-step="5">
+      <h2><span class="num">5</span> 스타일 <span class="chev"></span></h2>
+      <div class="body">
+        <label class="field"><span>배경 지도</span><select id="baseSource"></select></label>
+        <label class="check"><input id="hybridLabels" type="checkbox"> 브이월드 지명 라벨 겹치기 (미리보기 참고용)</label>
+        <div class="row">
+          <label class="check inline"><input id="veil" type="checkbox" checked> 흰색 안개 레이어 (지도를 살짝 흐리게)</label>
+        </div>
+        <label class="field"><span>안개 불투명도 <output id="veilOpacityOut">20%</output></span><input id="veilOpacity" type="range" min="0" max="0.9" step="0.05" value="0.2"></label>
+        <div class="grid2">
+          <label class="field"><span>흑백 <output id="grayscaleOut">85%</output></span><input id="grayscale" type="range" min="0" max="1" step="0.05" value="0.85"></label>
+          <label class="field"><span>밝기 <output id="brightnessOut">60%</output></span><input id="brightness" type="range" min="0.2" max="1.3" step="0.05" value="0.6"></label>
+          <label class="field"><span>대비 <output id="contrastOut">110%</output></span><input id="contrast" type="range" min="0.6" max="1.8" step="0.05" value="1.1"></label>
+          <label class="field"><span>글자 크기 <output id="fontScaleOut">100%</output></span><input id="fontScale" type="range" min="0.6" max="2" step="0.05" value="1"></label>
+          <label class="field"><span>도로 두께 <output id="roadWidthOut">4</output></span><input id="roadWidth" type="range" min="1" max="10" step="0.5" value="4"></label>
+          <label class="field"><span>기업 라벨 스타일</span><select id="labelMode"><option value="halo">흰 글자 + 검은 테두리</option><option value="box">반투명 박스</option></select></label>
+        </div>
+        <div class="grid3 colors">
+          <label><input type="color" id="colSite" value="#FF2A2A"> SITE</label>
+          <label><input type="color" id="colExisting" value="#2D7BFF"> 기존공장</label>
+          <label><input type="color" id="colExpansion" value="#FF2A2A"> 증축부지</label>
+          <label><input type="color" id="colIndustrial" value="#FF3B3B"> 산단 경계</label>
+          <label><input type="color" id="colPark" value="#6FE07A"> 공원</label>
+          <label><input type="color" id="colMotorway" value="#FF8A00"> 고속도로</label>
+          <label><input type="color" id="colRing" value="#FFFFFF"> 반경 원</label>
+          <label><input type="color" id="colWater" value="#4FB3FF"> 하천</label>
+        </div>
+        <label class="check"><input id="showRoadLabels" type="checkbox" checked> 도로명 라벨</label>
+        <label class="check"><input id="showPoiLabels" type="checkbox" checked> 기업·시설 라벨</label>
+      </div>
+    </section>
+
+    <section class="step" data-step="6">
+      <h2><span class="num">6</span> 내보내기 <span class="chev"></span></h2>
+      <div class="body">
+        <p class="hint">화면에 보이는 프레임 그대로, 선택한 가로 픽셀로 다시 렌더링합니다.</p>
+        <label class="field"><span>PNG 가로 크기</span>
+          <select id="exportWidth"><option value="2000">2000 px</option><option value="3000" selected>3000 px (A3 300dpi급)</option><option value="4000">4000 px</option><option value="5000">5000 px</option></select></label>
+        <div class="row">
+          <button id="btnExportPng" class="btn primary">PNG 저장</button>
+          <button id="btnExportJpg" class="btn">JPG 저장</button>
+        </div>
+        <div class="row">
+          <button id="btnExportPptx" class="btn primary">PPTX 저장 (PPT에서 편집 가능)</button>
+        </div>
+        <p class="hint">PPTX: 항공사진은 그림, 도로·반경·필지·경계는 도형, 라벨은 텍스트 상자로 들어갑니다. 슬라이드 크기는 프레임 비율에 맞춰집니다.</p>
+        <div class="row">
+          <button id="btnExportSvg" class="btn">SVG 저장</button>
+          <label class="check inline"><input id="svgBackground" type="checkbox" checked> 배경 포함</label>
+        </div>
+        <div class="row">
+          <button id="btnExportDxf" class="btn">DXF 저장</button>
+          <select id="dxfProjection"><option value="epsg5186">EPSG:5186 (중부원점 TM)</option><option value="local">로컬(대지 중심 원점, m)</option></select>
+        </div>
+        <div id="exportProgress" class="progress hidden"><div class="bar"></div><span class="txt"></span></div>
+      </div>
+    </section>
+  </aside>
+
+  <main class="stage">
+    <div class="frame-wrap" id="frameWrap">
+      <div id="map" class="frame">
+        <div id="inset" class="inset"></div>
+        <div class="map-controls">
+          <button id="zoomIn" title="확대">＋</button>
+          <button id="zoomOut" title="축소">－</button>
+        </div>
+        <div id="modeBanner" class="mode-banner hidden"></div>
+        <div id="attribution" class="attribution"></div>
+      </div>
+    </div>
+    <div class="statusbar">
+      <span id="statusCoord"></span>
+      <span id="statusZoom"></span>
+      <span id="statusScale"></span>
+      <span id="statusMsg" class="grow"></span>
+    </div>
+  </main>
+</div>
+
+<dialog id="settingsDialog">
+  <form method="dialog" class="settings">
+    <h2>API 키 설정</h2>
+    <p class="hint">키는 이 브라우저(localStorage)에만 저장됩니다. 배포용으로는 <code>js/config.js</code>에 넣어두면 모든 사용자가 바로 사용할 수 있습니다.</p>
+    <label class="field"><span>브이월드 인증키 <a href="https://www.vworld.kr/dev/v4api.do" target="_blank" rel="noopener">발급</a></span><input id="cfgVworldKey" type="text" autocomplete="off"></label>
+    <label class="field"><span>브이월드 등록 도메인 (비우면 현재 주소)</span><input id="cfgVworldDomain" type="text" placeholder="https://아이디.github.io"></label>
+    <label class="field"><span>카카오 JavaScript 키 <a href="https://developers.kakao.com/console/app" target="_blank" rel="noopener">발급</a></span><input id="cfgKakaoKey" type="text" autocomplete="off"></label>
+    <label class="field"><span>브이월드 산업단지 레이어 ID (선택)</span><input id="cfgIndustrialLayer" type="text" placeholder="예: LT_C_xxxxx"></label>
+    <div class="row end">
+      <button value="cancel" class="btn ghost">취소</button>
+      <button id="btnSaveSettings" value="ok" class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
