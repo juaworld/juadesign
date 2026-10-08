@@ -274,12 +274,22 @@ export class App {
     };
   }
 
+  /** OSM 데이터 한 번에 조회 (같은 범위는 10분간 캐시 → 공용 서버 요청 수 최소화) */
+  async fetchOsm(bbox) {
+    const key = [bbox.south, bbox.west, bbox.north, bbox.east].map((v) => v.toFixed(4)).join(',');
+    const c = this._osmCache;
+    if (c && c.key === key && Date.now() - c.time < 10 * 60 * 1000) return c.elements;
+    const elements = await osm.overpass(this.config, osm.buildAllQuery(bbox), (m) => this.log(m));
+    this._osmCache = { key, time: Date.now(), elements };
+    return elements;
+  }
+
   // ---------- 도로 ----------
   async loadRoads() {
     const bbox = this.queryBbox();
     this.ui.setBusy(true, '도로 데이터 불러오는 중…');
     try {
-      const els = await osm.overpass(this.config, osm.buildRoadsQuery(bbox), (m) => this.log(m));
+      const els = await this.fetchOsm(bbox);
       const parsed = osm.parseRoads(els);
       const prev = new Map(this.scene.roads.filter((r) => r.source !== 'manual').map((r) => [`${r.cls}|${r.name}`, r]));
       const keep = this.scene.roads.filter((r) => r.source === 'manual');
@@ -474,8 +484,8 @@ export class App {
     const bbox = this.queryBbox();
     this.ui.setBusy(true, '구역 데이터 불러오는 중…');
     try {
-      const els = await osm.overpass(this.config, osm.buildAreasQuery(bbox), (m) => this.log(m));
-      const parsed = osm.parseAreas(els);
+      const els = await this.fetchOsm(bbox);
+      const parsed = osm.parseAreas(els).filter((a) => !a.isCompanySite); // 개별 공장 부지는 기업 라벨로
       const keep = this.scene.areas.filter((a) => a.source === 'manual');
       const prev = new Map(this.scene.areas.filter((a) => a.source !== 'manual').map((a) => [a.key, a]));
       const areas = [];
@@ -554,7 +564,7 @@ export class App {
       // OSM
       if (src.useOsmPois) {
         try {
-          const els = await osm.overpass(this.config, osm.buildPoisQuery(bbox), (m) => this.log(m));
+          const els = await this.fetchOsm(bbox);
           const pois = osm.parsePois(els);
           for (const p of pois) found.push({ id: `o${p.osmId.replace('/', '')}`, name: p.name, kind: p.kind, source: 'osm', lat: p.lat, lng: p.lng, dist: haversine(c.lat, c.lng, p.lat, p.lng) });
           this.log(`OSM 건물·시설: ${pois.length}건`);
