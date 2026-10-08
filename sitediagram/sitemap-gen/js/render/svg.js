@@ -276,10 +276,11 @@ export function renderOverlay(scene, ctx) {
       const angle = normalizeAngleDeg(road.label.angle || 0);
       let b;
       if (s.major) {
-        // 고속도로·간선도로: 배경 박스 없이 글자만 (흰 글자 + 후광)
+        // 고속도로·간선도로: 배경 박스·후광 없이 글자만 (색은 style.motorwayLabelColor)
+        const fg = st.motorwayLabelColor || '#111111';
         const tw = textWeight(st, 700);
         const m = textBlockSize(text, size, tw.weight, tw.boost);
-        b = { svg: haloText(text, 0, 0, size, '#FFFFFF', k, { st }), w: m.w + 4 * k, h: m.h + 2 * k };
+        b = { svg: textEl(m.lines, 0, 0, size, `text-anchor="middle" font-weight="${tw.weight}" fill="${fg}"${boostAttrs(fg, size, tw.boost)}`), w: m.w + 4 * k, h: m.h + 2 * k };
       } else {
         const { bg, fg } = roadLabelColors(s);
         b = boxText(text, 0, 0, size, k, { bg, fg, rx: 2.5, padX: 6, padY: 2.5, weight: 700, st });
