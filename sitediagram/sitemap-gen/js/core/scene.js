@@ -64,7 +64,7 @@ export function defaultScene() {
   return {
     version: SCENE_VERSION,
     meta: { name: '새 대지분석도', created: Date.now(), updated: Date.now() },
-    view: { center: { lat: 36.964, lng: 127.845 }, zoom: 15.3, aspect: '16:9' },
+    view: { center: { lat: 36.996, lng: 127.839 }, zoom: 15.3, aspect: '16:9' },
     site: {
       name: 'SITE 명칭',
       center: null, // {lat,lng}
