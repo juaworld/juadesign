@@ -242,8 +242,8 @@ export async function buildPPTX(scene, opts) {
       const [x, y] = P(r.label.pos.lat, r.label.pos.lng);
       const rot = normalizeAngleDeg(r.label.angle || 0);
       if (s.major) {
-        // 고속도로·간선도로: 배경 없이 글자만
-        shapes.push(textbox(`도로명 ${r.name}`, r.label.text || r.name, x, y, st.roadFontSize * fs, { color: '#FFFFFF', glow: { radius: 2.5, alpha: 0.75 }, rot }));
+        // 고속도로·간선도로: 배경·후광 없이 글자만 (색은 style.motorwayLabelColor)
+        shapes.push(textbox(`도로명 ${r.name}`, r.label.text || r.name, x, y, st.roadFontSize * fs, { color: st.motorwayLabelColor || '#111111', rot }));
         continue;
       }
       const { bg, fg } = roadLabelColors(s);
