@@ -44,6 +44,7 @@ export function defaultStyle() {
     roadWidth: 4,
     roadPalette: ROAD_PALETTE.slice(),
     motorwayColor: '#D0D4D9',
+    motorwayLabelColor: '#111111', // 고속도로·간선도로 이름 글자색 (배경 없이 글자만)
     railColor: '#2B2B2B',
     waterColor: '#4FB3FF',
     ringColor: '#FFFFFF',
