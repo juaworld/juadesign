@@ -49,12 +49,28 @@ function pathFromLines(segments, P) {
   return d;
 }
 
-/** 텍스트 블록 크기 (여러 줄 지원) */
-export function textBlockSize(text, size, weight = 700) {
+/**
+ * 글자 굵기 설정(style.textWeight, 1~10) → font-weight + 보정 외곽선 두께(em).
+ * 10 = 굵게(700). 그보다 작으면 보통(400) 글자에 글자색 외곽선을 얇게 더해 중간 굵기를 만든다
+ * (맑은 고딕처럼 중간 굵기 폰트가 없는 환경에서도 PC마다 같은 두께로 보이게 하기 위함).
+ * 세로획 기준: 굵게 ≈ 0.14em, 보통 ≈ 0.085em → 목표 두께 = 0.14em × (설정/10)
+ */
+export function textWeight(st, base = 700) {
+  if (base >= 900) return { weight: 900, boost: 0 }; // SITE 글자는 항상 가장 굵게
+  const raw = st && st.textWeight != null && st.textWeight !== '' ? Number(st.textWeight) : 10;
+  const t = Number.isFinite(raw) ? Math.min(10, Math.max(1, raw)) : 10;
+  if (t >= 10) return { weight: base, boost: 0 };
+  const stem = 0.14 * (t / 10);
+  if (stem >= 0.085) return { weight: 400, boost: stem - 0.085 };
+  return { weight: 300, boost: 0 };
+}
+
+/** 텍스트 블록 크기 (여러 줄 지원). boost = 보정 외곽선(em) */
+export function textBlockSize(text, size, weight = 700, boost = 0) {
   const lines = String(text).split('\n');
   let w = 0;
   for (const l of lines) w = Math.max(w, measureText(l, size, weight));
-  return { w, h: lines.length * size * 1.2, lines };
+  return { w: w + boost * size, h: lines.length * size * 1.2, lines };
 }
 
 function textEl(lines, x, y, size, attrs) {
@@ -67,20 +83,33 @@ function textEl(lines, x, y, size, attrs) {
   return t + '</text>';
 }
 
-/** 후광(halo) 텍스트 */
-function haloText(text, x, y, size, fill, k, opts = {}) {
-  const { lines } = textBlockSize(text, size, opts.weight || 700);
-  const halo = opts.halo || 'rgba(0,0,0,0.78)';
-  const attrs = `text-anchor="${opts.anchor || 'middle'}" font-weight="${opts.weight || 700}" fill="${fill}" stroke="${halo}" stroke-width="${f1((opts.haloWidth ?? 3) * k)}" stroke-linejoin="round" paint-order="stroke"${opts.extra || ''}`;
-  return textEl(lines, x, y, size, attrs);
+/** 보정 외곽선 속성 (boost>0일 때 글자색으로 얇은 외곽선 → 중간 굵기) */
+function boostAttrs(fill, size, boost) {
+  return boost > 0 ? ` stroke="${fill}" stroke-width="${(Math.round(boost * size * 100) / 100).toString()}" stroke-linejoin="round"` : '';
 }
 
-/** 박스(pill) 텍스트: 중앙 (x,y) */
-function boxText(text, x, y, size, k, { bg, fg, rx = 3, padX = 6, padY = 3, weight = 700, opacity = 1, stroke = null }) {
-  const { w, h, lines } = textBlockSize(text, size, weight);
+/** 후광(halo) 텍스트. opts.st = scene.style (글자 굵기 설정) */
+function haloText(text, x, y, size, fill, k, opts = {}) {
+  const { weight, boost } = textWeight(opts.st, opts.weight || 700);
+  const { lines } = textBlockSize(text, size, weight, boost);
+  const halo = opts.halo || 'rgba(0,0,0,0.78)';
+  const hw = (opts.haloWidth ?? 3) * k;
+  const anchor = `text-anchor="${opts.anchor || 'middle'}" font-weight="${weight}"`;
+  if (!(boost > 0)) {
+    return textEl(lines, x, y, size, `${anchor} fill="${fill}" stroke="${halo}" stroke-width="${f1(hw)}" stroke-linejoin="round" paint-order="stroke"${opts.extra || ''}`);
+  }
+  // 외곽선 보정이 있으면 두 겹: 후광(글자 두께 보정만큼 넓힘) + 글자(보정 외곽선 포함)
+  return textEl(lines, x, y, size, `${anchor} fill="none" stroke="${halo}" stroke-width="${f1(hw + boost * size)}" stroke-linejoin="round"${opts.extra || ''}`)
+    + textEl(lines, x, y, size, `${anchor} fill="${fill}"${boostAttrs(fill, size, boost)}${opts.extra || ''}`);
+}
+
+/** 박스(pill) 텍스트: 중앙 (x,y). st = scene.style (글자 굵기 설정) */
+function boxText(text, x, y, size, k, { bg, fg, rx = 3, padX = 6, padY = 3, weight = 700, opacity = 1, stroke = null, st = null }) {
+  const tw = textWeight(st, weight);
+  const { w, h, lines } = textBlockSize(text, size, tw.weight, tw.boost);
   const bw = w + padX * 2 * k, bh = h + padY * 2 * k;
   let s = `<rect x="${f1(x - bw / 2)}" y="${f1(y - bh / 2)}" width="${f1(bw)}" height="${f1(bh)}" rx="${f1(rx * k)}" fill="${bg}" opacity="${opacity}"${stroke ? ` stroke="${stroke}" stroke-width="${f1(k)}"` : ''}/>`;
-  s += textEl(lines, x, y, size, `text-anchor="middle" font-weight="${weight}" fill="${fg}"`);
+  s += textEl(lines, x, y, size, `text-anchor="middle" font-weight="${tw.weight}" fill="${fg}"${boostAttrs(fg, size, tw.boost)}`);
   return { svg: s, w: bw, h: bh };
 }
 
@@ -150,6 +179,7 @@ export function renderOverlay(scene, ctx) {
   const k = ctx.k || 1;
   const st = scene.style;
   const fs = st.fontScale || 1;
+  const TW = textWeight(st); // 글자 굵기 설정
   const out = [];
   const center = siteCenter(scene);
   const W = ctx.W, H = ctx.H;
@@ -207,9 +237,9 @@ export function renderOverlay(scene, ctx) {
       out.push(`<circle cx="${f1(cx)}" cy="${f1(cy)}" r="${f1(rp)}" fill="none" stroke="${st.ringColor}" stroke-width="${f1(st.ringWidth * k)}" stroke-dasharray="${f1(6 * k)} ${f1(5 * k)}" opacity="0.85"/>`);
       if (r.label) {
         const size = 10.5 * fs * k;
-        const { w, h } = textBlockSize(r.label, size);
+        const { w, h } = textBlockSize(r.label, size, TW.weight, TW.boost);
         const x = ex + 2 * k, y = ey;
-        labels.push({ id: `ring:${r.id}`, priority: 900, box: { x: x - w / 2 - 3 * k, y: y - h / 2 - 2 * k, w: w + 6 * k, h: h + 4 * k }, svg: haloText(r.label, x, y, size, '#FFFFFF', k, { haloWidth: 3 }) });
+        labels.push({ id: `ring:${r.id}`, priority: 900, box: { x: x - w / 2 - 3 * k, y: y - h / 2 - 2 * k, w: w + 6 * k, h: h + 4 * k }, svg: haloText(r.label, x, y, size, '#FFFFFF', k, { haloWidth: 3, st }) });
       }
     }
   }
@@ -222,12 +252,12 @@ export function renderOverlay(scene, ctx) {
     const s = areaStyle(area, st);
     const [x, y] = P(ll[0], ll[1]);
     const size = (st.roadFontSize + s.fontDelta) * fs * k;
-    const { w, h } = textBlockSize(area.name, size);
+    const { w, h } = textBlockSize(area.name, size, TW.weight, TW.boost);
     const id = `area:${area.id}`;
     labels.push({
       id, priority: area.kind === 'industrial' ? 820 : 790 + (area.label?.manual ? 5 : 0),
       box: { x: x - w / 2 - 2 * k, y: y - h / 2 - k, w: w + 4 * k, h: h + 2 * k },
-      svg: `<g${dragAttrs(ctx, id, x, y)}>${selBox(ctx, id, x, y, w, h, k)}${haloText(area.name, x, y, size, s.text, k, { halo: s.halo, haloWidth: 3.2 })}</g>`,
+      svg: `<g${dragAttrs(ctx, id, x, y)}>${selBox(ctx, id, x, y, w, h, k)}${haloText(area.name, x, y, size, s.text, k, { halo: s.halo, haloWidth: 3.2, st })}</g>`,
     });
   }
 
@@ -243,7 +273,7 @@ export function renderOverlay(scene, ctx) {
       const size = st.roadFontSize * fs * k;
       const angle = normalizeAngleDeg(road.label.angle || 0);
       const { bg, fg } = roadLabelColors(s);
-      const b = boxText(text, 0, 0, size, k, { bg, fg, rx: 2.5, padX: 6, padY: 2.5, weight: 700 });
+      const b = boxText(text, 0, 0, size, k, { bg, fg, rx: 2.5, padX: 6, padY: 2.5, weight: 700, st });
       const id = `road:${road.id}`;
       labels.push({
         id, priority: 700 + (road.label.manual ? 60 : 0) - order++ * 0.01,
@@ -264,7 +294,7 @@ export function renderOverlay(scene, ctx) {
       const kind = POI_KINDS[poi.kind] || POI_KINDS.company;
       const color = poi.color || kind.color;
       const size = st.poiFontSize * fs * k;
-      const { w, h } = textBlockSize(poi.name, size);
+      const { w, h } = textBlockSize(poi.name, size, TW.weight, TW.boost);
       const id = `poi:${poi.id}`;
       let g = `<g${dragAttrs(ctx, id, x, y)}>`;
       const dist = Math.hypot(ax - x, ay - y);
@@ -275,10 +305,10 @@ export function renderOverlay(scene, ctx) {
       g += selBox(ctx, id, x, y, w, h, k);
       let bw = w + 4 * k, bh = h + 2 * k;
       if (st.labelMode === 'box') {
-        const b = boxText(poi.name, x, y, size, k, { bg: 'rgba(0,0,0,0.6)', fg: color, rx: 3, padX: 5, padY: 2.5 });
+        const b = boxText(poi.name, x, y, size, k, { bg: 'rgba(0,0,0,0.6)', fg: color, rx: 3, padX: 5, padY: 2.5, st });
         g += b.svg; bw = b.w; bh = b.h;
       } else {
-        g += haloText(poi.name, x, y, size, color, k, { haloWidth: 3 });
+        g += haloText(poi.name, x, y, size, color, k, { haloWidth: 3, st });
       }
       g += '</g>';
       const dSite = Math.hypot(ax - scx, ay - scy);
@@ -301,7 +331,7 @@ export function renderOverlay(scene, ctx) {
       const lp = scene.site.label?.pos;
       const [lx, ly] = lp ? P(lp.lat, lp.lng) : [x, y + 15 * k];
       const nsize = size * 0.6;
-      const b = boxText(scene.site.name, 0, 0, nsize, k, { bg: 'rgba(0,0,0,0.72)', fg: '#FFFFFF', rx: 2, padX: 7, padY: 3, weight: 700 });
+      const b = boxText(scene.site.name, 0, 0, nsize, k, { bg: 'rgba(0,0,0,0.72)', fg: '#FFFFFF', rx: 2, padX: 7, padY: 3, weight: 700, st });
       const id = 'site:label';
       out.push(`<g${dragAttrs(ctx, id, lx, ly)} transform="translate(${f1(lx)} ${f1(ly)})">${b.svg}${selBox(ctx, id, 0, 0, b.w, b.h, k)}</g>`);
       obstacles.push({ x: lx - b.w / 2, y: ly - b.h / 2, w: b.w, h: b.h });
@@ -367,7 +397,7 @@ export function renderInsetOverlay(scene, ctx) {
   const title = (scene.inset.title || '').trim();
   const fsz = 11 * (st.fontScale || 1) * k;
   if (title) {
-    const b = boxText(title, 0, 0, fsz, k, { bg: 'rgba(0,0,0,0.75)', fg: '#FFFFFF', rx: 0, padX: 7, padY: 3, weight: 700 });
+    const b = boxText(title, 0, 0, fsz, k, { bg: 'rgba(0,0,0,0.75)', fg: '#FFFFFF', rx: 0, padX: 7, padY: 3, weight: 700, st });
     out.push(`<g transform="translate(${f1(b.w / 2 + 6 * k)} ${f1(b.h / 2 + 6 * k)})">${b.svg}</g>`);
   }
   if (scene.inset.legend && scene.site.parcels.length) {
@@ -378,14 +408,15 @@ export function renderInsetOverlay(scene, ctx) {
     if (groups.has('site')) items.push({ label: '대지', fill: hexToRgba(st.siteColor, 0.5), stroke: st.siteColor, dash: false });
     const lh = fsz * 1.6, sw = 18 * k, sh = fsz * 0.95;
     let maxW = 0;
-    for (const it of items) maxW = Math.max(maxW, measureText(it.label, fsz * 0.95, 700));
+    const TW = textWeight(st);
+    for (const it of items) maxW = Math.max(maxW, measureText(it.label, fsz * 0.95, TW.weight) + TW.boost * fsz * 0.95);
     const bw = sw + maxW + 22 * k, bh = items.length * lh + 8 * k;
     const bx = ctx.W - bw - 6 * k, by = ctx.H - bh - 6 * k;
     out.push(`<rect x="${f1(bx)}" y="${f1(by)}" width="${f1(bw)}" height="${f1(bh)}" fill="rgba(0,0,0,0.65)" rx="${f1(2 * k)}"/>`);
     items.forEach((it, i) => {
       const yy = by + 4 * k + i * lh + lh / 2;
       out.push(`<rect x="${f1(bx + 7 * k)}" y="${f1(yy - sh / 2)}" width="${f1(sw)}" height="${f1(sh)}" fill="${it.fill}" stroke="${it.stroke}" stroke-width="${f1(1.5 * k)}" ${it.dash ? `stroke-dasharray="${f1(4 * k)} ${f1(3 * k)}"` : ''}/>`);
-      out.push(textEl([it.label], bx + 7 * k + sw + 6 * k, yy, fsz * 0.95, `text-anchor="start" font-weight="700" fill="#FFFFFF"`));
+      out.push(textEl([it.label], bx + 7 * k + sw + 6 * k, yy, fsz * 0.95, `text-anchor="start" font-weight="${TW.weight}" fill="#FFFFFF"${boostAttrs('#FFFFFF', fsz * 0.95, TW.boost)}`));
     });
   }
   return out.join('');
