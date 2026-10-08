@@ -94,15 +94,16 @@ function selBox(ctx, id, x, y, w, h, k) {
 }
 
 export function areaStyle(area, st) {
+  const w = (d) => (area.width != null && area.width !== '' ? Number(area.width) : d);
   switch (area.kind) {
     case 'industrial':
-      return { fill: hexToRgba(st.industrialColor, 0.05), stroke: st.industrialColor, width: 2.5, dash: [10, 6], text: st.industrialColor, halo: 'rgba(255,255,255,0.9)', fontDelta: 2 };
+      return { fill: hexToRgba(st.industrialColor, 0.05), stroke: st.industrialColor, width: w(2.5), dash: [10, 6], text: st.industrialColor, halo: 'rgba(255,255,255,0.9)', fontDelta: 2 };
     case 'park':
-      return { fill: hexToRgba(st.parkColor, 0.16), stroke: hexToRgba(st.parkColor, 0.6), width: 1, dash: null, text: st.parkColor, halo: 'rgba(0,0,0,0.8)', fontDelta: 0 };
+      return { fill: hexToRgba(st.parkColor, 0.16), stroke: hexToRgba(st.parkColor, 0.6), width: w(1), dash: null, text: st.parkColor, halo: 'rgba(0,0,0,0.8)', fontDelta: 0 };
     case 'water':
-      return { fill: hexToRgba(st.waterColor, 0.25), stroke: 'none', width: 0, dash: null, text: st.waterColor, halo: 'rgba(0,0,0,0.8)', fontDelta: 0 };
+      return { fill: hexToRgba(st.waterColor, 0.25), stroke: w(0) > 0 ? st.waterColor : 'none', width: w(0), dash: null, text: st.waterColor, halo: 'rgba(0,0,0,0.8)', fontDelta: 0 };
     default:
-      return { fill: 'rgba(255,255,255,0.08)', stroke: area.color || '#FFFFFF', width: 2, dash: [8, 5], text: area.color || '#FFFFFF', halo: 'rgba(0,0,0,0.8)', fontDelta: 0 };
+      return { fill: 'rgba(255,255,255,0.08)', stroke: area.color || '#FFFFFF', width: w(2), dash: [8, 5], text: area.color || '#FFFFFF', halo: 'rgba(0,0,0,0.8)', fontDelta: 0 };
   }
 }
 
@@ -363,7 +364,7 @@ export function renderInsetOverlay(scene, ctx) {
     out.push(haloText('SITE', x + 13 * pinScale, y - 20 * pinScale, 13 * pinScale, st.siteColor, k, { anchor: 'start', weight: 900, halo: 'rgba(255,255,255,0.95)', haloWidth: 3 }));
   }
   // 제목·범례
-  const title = scene.inset.title || scene.site.name || '';
+  const title = (scene.inset.title || '').trim();
   const fsz = 11 * (st.fontScale || 1) * k;
   if (title) {
     const b = boxText(title, 0, 0, fsz, k, { bg: 'rgba(0,0,0,0.75)', fg: '#FFFFFF', rx: 0, padX: 7, padY: 3, weight: 700 });
