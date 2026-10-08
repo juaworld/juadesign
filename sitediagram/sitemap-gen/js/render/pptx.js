@@ -239,9 +239,15 @@ export async function buildPPTX(scene, opts) {
     for (const r of scene.roads) {
       if (r.visible === false || !r.label?.pos || r.label.visible === false || suppressed.has(`road:${r.id}`)) continue;
       const s = roadStroke(r, st);
-      const { bg, fg } = roadLabelColors(s);
       const [x, y] = P(r.label.pos.lat, r.label.pos.lng);
-      shapes.push(textbox(`도로명 ${r.name}`, r.label.text || r.name, x, y, st.roadFontSize * fs, { color: fg, bg, rounded: true, padX: 6, padY: 2.5, rot: normalizeAngleDeg(r.label.angle || 0) }));
+      const rot = normalizeAngleDeg(r.label.angle || 0);
+      if (s.major) {
+        // 고속도로·간선도로: 배경 없이 글자만
+        shapes.push(textbox(`도로명 ${r.name}`, r.label.text || r.name, x, y, st.roadFontSize * fs, { color: '#FFFFFF', glow: { radius: 2.5, alpha: 0.75 }, rot }));
+        continue;
+      }
+      const { bg, fg } = roadLabelColors(s);
+      shapes.push(textbox(`도로명 ${r.name}`, r.label.text || r.name, x, y, st.roadFontSize * fs, { color: fg, bg, rounded: true, padX: 6, padY: 2.5, rot }));
     }
   }
   // 기업·시설 라벨
