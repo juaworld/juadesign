@@ -171,7 +171,7 @@ export function initUI(app) {
   bindStyle('#veilOpacity', 'veilOpacity', parseFloat, '#veilOpacityOut', pct);
   bindStyle('#showRoadLabels', 'showRoadLabels', (v) => !!v);
   bindStyle('#showPoiLabels', 'showPoiLabels', (v) => !!v);
-  const colorMap = { colSite: 'siteColor', colExisting: 'existingColor', colExpansion: 'expansionColor', colIndustrial: 'industrialColor', colPark: 'parkColor', colMotorway: 'motorwayColor', colRing: 'ringColor', colWater: 'waterColor' };
+  const colorMap = { colSite: 'siteColor', colExisting: 'existingColor', colExpansion: 'expansionColor', colIndustrial: 'industrialColor', colPark: 'parkColor', colMotorway: 'motorwayColor', colMotorwayLabel: 'motorwayLabelColor', colRing: 'ringColor', colWater: 'waterColor' };
   for (const [id, key] of Object.entries(colorMap)) {
     $('#' + id).addEventListener('input', (e) => {
       scene().style[key] = e.target.value.toUpperCase();
