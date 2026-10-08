@@ -147,9 +147,9 @@ export function roadStroke(road, st) {
   return { color: road.color || st.roadPalette[0], width: road.width || st.roadWidth };
 }
 
-/** 도로 라벨 색: 선 색 배경 + 흰/검 글자. 고속도로·철도는 어두운 배경에 흰 글자 */
+/** 도로 라벨 색: 선 색 배경 + 흰/검 글자 (고속도로도 선 색 그대로 — 검정 배경 없음). 철도만 어두운 배경 */
 export function roadLabelColors(s) {
-  if (s.major || s.rail) return { bg: '#2E3238', fg: '#FFFFFF' };
+  if (s.rail) return { bg: '#2E3238', fg: '#FFFFFF' };
   return { bg: s.color, fg: luminance(s.color) > 0.6 ? '#111111' : '#FFFFFF' };
 }
 
