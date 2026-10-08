@@ -191,13 +191,16 @@ def main():
 
         # 스타일 변경 & 재배치
         page.click(".step[data-step='5'] h2")
-        # 글자 굵기 (기본 7.6 → 보통 글자 + 보정 외곽선, 10 → 굵게)
+        # 글자 굵기 (기본 4 → 가는 글꼴, 10 → 굵게) + 건물 위치점 없음
         tw = page.evaluate("""() => {
           const t = Array.from(document.querySelectorAll('#map .smap-overlay text')).find(e => e.getAttribute('fill') === '#FFFFFF' && !/SITE/.test(e.textContent));
           return t && { weight: t.getAttribute('font-weight'), stroke: t.getAttribute('stroke'), sw: t.getAttribute('stroke-width'), slider: document.querySelector('#textWeight').value };
         }""")
         print("TEXT WEIGHT default:", tw)
-        assert tw and tw["weight"] == "400" and tw["stroke"] == "#FFFFFF", "글자 굵기 기본값(7.6) 렌더 오류"
+        assert tw and tw["weight"] == "300" and tw["slider"] == "4", "글자 굵기 기본값(4) 렌더 오류"
+        dots = page.evaluate("document.querySelectorAll('#map .smap-overlay g[data-drag^=\"poi:\"] circle').length")
+        print("POI anchor dots:", dots)
+        assert dots == 0, "건물 위치점이 아직 그려짐"
         page.fill("#textWeight", "10"); page.dispatch_event("#textWeight", "input")
         tw10 = page.evaluate("""() => {
           const t = Array.from(document.querySelectorAll('#map .smap-overlay text')).find(e => e.getAttribute('fill') === '#FFFFFF' && !/SITE/.test(e.textContent));
@@ -205,7 +208,7 @@ def main():
         }""")
         print("TEXT WEIGHT 10:", tw10)
         assert tw10 and tw10["weight"] == "700", "글자 굵기 10 렌더 오류"
-        page.fill("#textWeight", "7.6"); page.dispatch_event("#textWeight", "input")
+        page.fill("#textWeight", "4"); page.dispatch_event("#textWeight", "input")
 
         page.fill("#fontScale", "1.3"); page.dispatch_event("#fontScale", "input")
         page.select_option("#labelMode", "box")
