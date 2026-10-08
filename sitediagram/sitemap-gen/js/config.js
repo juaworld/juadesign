@@ -4,7 +4,7 @@
 // ==========================================================
 window.SITEDIAGRAM_CONFIG = {
   // 브이월드(https://www.vworld.kr) 오픈API 인증키. 발급 시 '서비스 URL'에 배포 도메인(예: https://아이디.github.io) 등록 필수
-  vworldKey: '',
+  vworldKey: '42D6F947-0ED3-4EFB-A3A4-D2B05227ABDE', // 개발키, 만료 2027-04-08 (만료 전 브이월드 마이포털에서 연장)
   // 브이월드에 등록한 서비스 URL. 비워두면 현재 사이트 주소(location.origin)를 사용
   vworldDomain: '',
   // 카카오 개발자(https://developers.kakao.com) JavaScript 키. [플랫폼 > Web] 에 배포 도메인 등록 필수
@@ -16,6 +16,7 @@ window.SITEDIAGRAM_CONFIG = {
   vworldDataUrl: 'https://api.vworld.kr/req/data',
   overpassEndpoints: [
     'https://overpass-api.de/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
     'https://overpass.private.coffee/api/interpreter',
   ],
