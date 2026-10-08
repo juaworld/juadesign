@@ -8,7 +8,7 @@ window.SITEDIAGRAM_CONFIG = {
   // 브이월드에 등록한 서비스 URL. 비워두면 현재 사이트 주소(location.origin)를 사용
   vworldDomain: '',
   // 카카오 개발자(https://developers.kakao.com) JavaScript 키. [플랫폼 > Web] 에 배포 도메인 등록 필수
-  kakaoJsKey: '',
+  kakaoJsKey: 'da7335b86367760592513e3c58d753cf', // 카카오 앱 ID 1601068 (사이트 분석 페이지 테스트), Web 도메인: https://juaworld.github.io, http://localhost:8765
   // 브이월드 데이터 API의 산업단지 레이어 ID (브이월드 '2D 데이터 API > 데이터 목록'에서 "산업단지/산업입지" 검색 후 입력). 비우면 OSM landuse=industrial 사용
   vworldIndustrialLayer: '',
 
