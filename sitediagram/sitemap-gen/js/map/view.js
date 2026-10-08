@@ -21,7 +21,19 @@ export class LiveView {
       center: insetCenter(sc),
       zoom: sc.inset.zoom,
       tileUrl: () => '',
-      interactive: false,
+      interactive: true,
+      minZoom: 10,
+      maxZoom: 20,
+    });
+    this.inset.dblclickZoom = true;
+    this._insetSyncing = false;
+    this.inset.on('moveend', () => {
+      if (this._insetSyncing) return;
+      const s = this.app.scene;
+      s.inset.zoom = Math.round(this.inset.zoom * 10) / 10;
+      s.inset.center = { ...this.inset.center };
+      this.app.commit({ ui: false });
+      this.app.ui && this.app.ui.syncInset && this.app.ui.syncInset();
     });
     this.svg = this.map.svg;
     this.renderState = null;
@@ -58,7 +70,7 @@ export class LiveView {
   }
 
   _onMapRender() {
-    // 팬/줌 도중: 마지막 렌더 기준 변환으로 즉시 반응, 끝나면 재렌더
+    // 팬/줄 도중: 마지막 렌더 기준 변환으로 즉시 반응, 끝나면 재렌더
     const rs = this.renderState;
     if (!rs) { this.renderOverlay(); return; }
     const [w, h] = this.map.getSize();
@@ -106,7 +118,9 @@ export class LiveView {
     this.insetEl.style.top = ir.y + 'px';
     this.insetEl.style.width = ir.w + 'px';
     this.insetEl.style.height = ir.h + 'px';
+    this._insetSyncing = true;
     this.inset.setView(insetCenter(sc), sc.inset.zoom, { silent: true });
+    this._insetSyncing = false;
     const [iw, ih] = this.inset.getSize();
     if (!iw) return;
     this.inset.svg.innerHTML = renderInsetOverlay(sc, {
@@ -193,7 +207,7 @@ export class LiveView {
     this.map.setView(c, zoom ?? this.map.zoom);
   }
 
-  /** 가장 큰 반경이 프레임에 들어오는 줌 계산 */
+  /** 가장 큰 반경이 프레임에 들어오는 줄 계산 */
   fitRadius(radiusM, padding = 1.15) {
     const [w, h] = this.map.getSize();
     const c = this.app.scene.site.center || this.app.scene.view.center;
