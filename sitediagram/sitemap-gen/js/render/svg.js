@@ -274,8 +274,16 @@ export function renderOverlay(scene, ctx) {
       const [x, y] = P(road.label.pos.lat, road.label.pos.lng);
       const size = st.roadFontSize * fs * k;
       const angle = normalizeAngleDeg(road.label.angle || 0);
-      const { bg, fg } = roadLabelColors(s);
-      const b = boxText(text, 0, 0, size, k, { bg, fg, rx: 2.5, padX: 6, padY: 2.5, weight: 700, st });
+      let b;
+      if (s.major) {
+        // 고속도로·간선도로: 배경 박스 없이 글자만 (흰 글자 + 후광)
+        const tw = textWeight(st, 700);
+        const m = textBlockSize(text, size, tw.weight, tw.boost);
+        b = { svg: haloText(text, 0, 0, size, '#FFFFFF', k, { st }), w: m.w + 4 * k, h: m.h + 2 * k };
+      } else {
+        const { bg, fg } = roadLabelColors(s);
+        b = boxText(text, 0, 0, size, k, { bg, fg, rx: 2.5, padX: 6, padY: 2.5, weight: 700, st });
+      }
       const id = `road:${road.id}`;
       labels.push({
         id, priority: 700 + (road.label.manual ? 60 : 0) - order++ * 0.01,
