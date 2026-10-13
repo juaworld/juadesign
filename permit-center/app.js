@@ -34,7 +34,7 @@ var STORE = 'vpc2_state', KEYSTORE = 'vpc2_vwkey';
 var DEFAULT_P = {
   name: '새 프로젝트', address: '', pnu: '', landUses: [], region: '', zone: '계획관리지역', use: '공장', nbSub: '', owner: '민간', work: '신축',
   siteArea: '', bldgArea: '', gfa: '', gfaFar: '', addArea: '', floorsAbove: '', floorsBelow: '0', height: '', eaves: '', span: '', cantilever: false, flatSlab: false,
-  excavation: '0', hvac: '있음', emp50: '', landCat: '', cutFill: '', growthPlan: false, devCmteEx: '', rooms: '', households: '', industrialComplex: false, landscapeDistrict: false, keyLandscapeArea: false,
+  excavation: '0', hvac: '있음', emp50: '', landCat: '', cutFill: '', growthPlan: false, devCmteEx: '', stWall: '', stChimney: '', stTower: '', stTank: '', stPv: '', stMast: '', stShelter: '', stPark: false, stSilo: false, rooms: '', households: '', industrialComplex: false, landscapeDistrict: false, keyLandscapeArea: false,
   districtPlan: false, greenbelt: false, separateAdd: false, mountain: '없음', parkingFloor: false, combustible750: false, trafficZone: '',
   parkingPlan: '', disabledParkingPlan: '', landscapePlan: '', bcrLimit: '', farLimit: '', epi: '', bf: {}, scapeAns: {}
 };
@@ -317,6 +317,25 @@ function applicability(p) {
   if (cat === '임야' || p.mountain !== '없음') why.push('산지 → 산지전용허가 별도 (산지관리법 제14조), 대체산림자원조성비 부과');
   if (form === true) why.push('허가기준: 도시·군계획조례의 경사도·표고·입목축적, 진입도로 폭, 배수 / 이행보증금 예치 (법 제58조·제60조)');
   r.dev = { lvl: lvl, why: why, asks: asks, form: form, cmte: cmte, label: lvl === 'req' ? (cmte === 'req' ? '도시계획위원회 심의 포함' : form === true ? '형질변경 포함' : '건축허가 시 의제') : '' };
+
+  /* 공작물 축조신고 */
+  why = []; asks = []; lvl = 'no';
+  var ST = [['stWall', 2, '옹벽·담장', 5], ['stChimney', 6, '굴뚝', 1], ['stTower', 4, '장식탑·기념탑·광고탑·광고판', 3], ['stTank', 8, '고가수조', 4], ['stMast', 6, '운동시설용 철탑(주거·상업지역은 통신철탑 포함)', 7], ['stPv', 5, '태양광 발전설비', 11]], stHit = [], stAny = false;
+  ST.forEach(function (s) { var raw = p[s[0]], v = num(raw); if (raw === '' || raw == null || !(v > 0)) return; stAny = true;
+    if (v > s[1]) { stHit.push(s[2]); why.push(s[2] + ' 높이 ' + v + 'm > ' + s[1] + 'm → 신고 (시행령 제118조제1항제' + s[3] + '호)'); }
+    else why.push(s[2] + ' 높이 ' + v + 'm ≤ ' + s[1] + 'm → 신고 불요'); });
+  if (num(p.stShelter) > 0) { stAny = true; if (num(p.stShelter) > 30) { stHit.push('지하대피호'); why.push('지하대피호 바닥면적 ' + num(p.stShelter) + '㎡ > 30㎡ → 신고 (제118조제1항제6호)'); } else why.push('지하대피호 30㎡ 이하 → 신고 불요'); }
+  if (p.stPark) { stAny = true; stHit.push('기계식·철골조립식 주차장'); why.push('외벽 없는 높이 8m 이하 기계식·철골조립식 주차장 → 신고 (제118조제1항제8호)'); }
+  if (p.stSilo) { stAny = true; stHit.push('조례 지정 제조·저장·유희시설'); why.push('건축조례로 정한 제조시설·저장시설(시멘트사일로 포함)·유희시설 → 신고 (제118조제1항제9호)'); }
+  if (stHit.length) {
+    lvl = 'req';
+    why.push('건축물과 분리 축조하는 공작물만 해당 — 건축허가 시 축조신고 의제 처리 가능 (건축법 제11조제5항)');
+    why.push('신고 대상 공작물은 국토계획법상 "공작물의 설치" 경미행위에서 빠짐 → 개발행위허가도 함께 의제 (국토계획법 시행령 제53조제2호 단서)');
+    if (stHit.some(function (h) { return /광고/.test(h); })) why.push('광고탑·광고판은 옥외광고물법 허가·신고 별도');
+    if (stHit.indexOf('옹벽·담장') >= 0) why.push('옹벽은 구조도·구조계산서로 안전성 제시, 대지 경계 옹벽은 건축법 제40조(대지 안전) 함께 검토');
+  } else if (cf != null && cf > 2 && (p.stWall === '' || p.stWall == null)) { lvl = 'ask'; asks.push({ field: 'stWall', label: '절·성토 ' + cf + 'm → 옹벽·담장을 설치하면 최고 높이(m)를 입력하세요 (2m 초과면 공작물 축조신고, 옹벽 없이 법면 처리면 0)' }); }
+  else why.push(stAny ? '입력한 공작물 모두 신고 기준 이하 → 비대상' : '입력된 분리 공작물 없음 → 비대상 (옹벽 2m·굴뚝 6m·광고탑 4m·고가수조 8m·태양광 5m 초과 등이면 대상)');
+  r.stw = { lvl: lvl, why: why, asks: asks, label: stHit.length ? stHit.length + '종' : '' };
 
   /* 소규모환경영향평가 */
   why = []; lvl = 'no'; var eia = false;

@@ -72,7 +72,7 @@ var BF_DIM = [
 var EVID = {
   permit:['bld11'], energy:['energy10'], zeb:['zeb12','zebB1'], ba:['baB1','empObl'], bf:['bfB22','bfB23'],
   scape:[], cmte:['bld55','bld2'], struct:['bld32'], fire:['fire7'], traffic:['trafficB1'], under:['under13','under23'],
-  dev:[], env:['eiaB4'], factory:['factory']
+  dev:[], stw:[], env:['eiaB4'], factory:['factory']
 };
 
 var REVIEWS = [
@@ -294,6 +294,16 @@ var REVIEWS = [
     {phase:0,t:'형질변경 면적이 용도지역별 허가규모(주거·상업·자연/생산녹지 1만, 공업·관리·농림 3만, 보전녹지·자연환경보전 5천㎡) 이상인지 확인'},
     {phase:1,t:'도시계획위원회 심의 대상이면 상정 일정(통상 월 1회, 마감 2~3주 전) 역산해 건축허가 일정에 반영'},
     {phase:1,t:'토공·배수·옹벽 계획 확정 후 이행보증금 산정'}]},
+{ id:'stw', name:'공작물축조신고', law:'건축법 제83조, 시행령 제118조', phase:2, weeks:'신고 처리 통상 5일 내외 (건축허가 시 의제 가능)',
+  docs:[
+    {id:'app',name:'공작물축조신고서',req:true,kw:['공작물축조','공작물 축조','축조신고']},
+    {id:'site',name:'공작물 배치도',req:true,kw:['배치도']},
+    {id:'struct',name:'공작물 구조도·구조계산서(옹벽·철탑 등)',req:true,kw:['구조도','구조계산','옹벽']},
+    {id:'elev',name:'공작물 입면·단면도',req:true,kw:['입면도','단면도']}
+  ],
+  content:[{label:'공작물 높이',any:['높이']},{label:'구조 안전',any:['구조계산','안정검토','안전율']}],
+  prep:[{phase:1,t:'분리 공작물(옹벽·담장 2m, 굴뚝 6m, 광고탑 4m, 고가수조 8m, 태양광 5m 초과 등) 목록·높이 확정'},
+    {phase:2,t:'건축허가 신청 때 공작물축조신고 의제 처리 요청 (건축법 제11조제5항)'}]},
 { id:'env', name:'소규모환경영향평가', law:'환경영향평가법 제43조, 시행령 별표4', phase:1, weeks:'협의 30일 + 보완 기간',
   docs:[
     {id:'eia',name:'소규모환경영향평가서',req:false,kw:['소규모환경영향평가','환경영향']}

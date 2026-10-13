@@ -172,6 +172,17 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
     <label class="ck"><input type="checkbox" data-f="parkingFloor">주차 용도 층·기계식 주차</label>
     <label class="ck"><input type="checkbox" data-f="combustible750">특수가연물 750배 이상</label>
   </div></fieldset>
+  <fieldset><legend>분리 공작물 (건축물과 따로 설치하는 것만, 없으면 비움)</legend><div class="grid">
+    <label>옹벽·담장 최고 높이 (m)<input data-f="stWall" inputmode="decimal"></label>
+    <label>굴뚝 높이 (m)<input data-f="stChimney" inputmode="decimal"></label>
+    <label>광고탑·장식탑·광고판 높이 (m)<input data-f="stTower" inputmode="decimal"></label>
+    <label>고가수조 높이 (m)<input data-f="stTank" inputmode="decimal"></label>
+    <label>태양광 발전설비 높이 (m)<input data-f="stPv" inputmode="decimal"><small>지상·별도 구조물 설치형</small></label>
+    <label>운동시설용 철탑 높이 (m)<input data-f="stMast" inputmode="decimal"><small>주거·상업지역은 통신철탑도 입력</small></label>
+    <label>지하대피호 바닥면적 (㎡)<input data-f="stShelter" inputmode="decimal"></label>
+    <label class="ck"><input type="checkbox" data-f="stPark">외벽 없는 기계식·철골조립식 주차장(8m 이하)</label>
+    <label class="ck"><input type="checkbox" data-f="stSilo">건축조례 지정 제조·저장시설(사일로 등)·유희시설</label>
+  </div></fieldset>
   <fieldset><legend>계획 수치</legend><div class="grid">
     <label>계획 주차대수<input data-f="parkingPlan" inputmode="numeric"></label>
     <label>계획 장애인 주차대수<input data-f="disabledParkingPlan" inputmode="numeric"></label>
