@@ -488,7 +488,7 @@ function jsonp(url) {
   });
 }
 function vw(path, params) {
-  var key = lsGet(KEYSTORE) || (window.VPC_SETTINGS && VPC_SETTINGS.vworldKey); if (!key) return Promise.reject(new Error('VWorld API 키가 없습니다. 관리자가 "설정"에서 등록해야 합니다.'));
+  var key = lsGet(KEYSTORE) || (window.VPC_SETTINGS && VPC_SETTINGS.vworldKey); if (!key) return Promise.reject(new Error('VWorld API 키가 아직 등록되지 않아 주소 자동조회가 꺼져 있습니다. 상단 [관리자] 로그인 → VWorld 키 붙여넣기 → [전체 직원에게 적용]'));
   var q = new URLSearchParams(Object.assign({ key: key, domain: location.origin, format: 'json' }, params)).toString();
   var url = VW + path + '?' + q;
   return fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).catch(function () { return jsonp(url); });
@@ -502,7 +502,8 @@ function polyArea(g) { // 경위도(EPSG:4326) 다각형 → 국지 평면 근�
 }
 var VW_LAYERS = [['LT_C_UQ111', 'zone'], ['LT_C_UQ112', 'zone'], ['LT_C_UQ113', 'zone'], ['LT_C_UQ114', 'zone'], ['LT_C_UQ121', '경관지구'], ['LT_C_UPISUQ161', '지구단위계획구역'], ['LT_C_UD801', '개발제한구역']];
 function lookupAddress(addr) {
-  var out = { addr: addr, uses: [] };
+  var out = { addr: addr, uses: [], errs: [] };
+  var vwErr = function (j) { return j && j.response && j.response.status === 'ERROR' ? ((j.response.error && (j.response.error.code + ' ' + (j.response.error.text || ''))) || '오류') : ''; };
   var search = function (cat) { return vw('/req/search', { service: 'search', request: 'search', version: '2.0', crs: 'EPSG:4326', size: 5, page: 1, query: addr, type: 'address', category: cat, errorformat: 'json' }); };
   var item = function (j) { if (j && j.response && j.response.status === 'ERROR') throw new Error('VWorld: ' + (j.response.error ? j.response.error.text : '오류')); return j && j.response && j.response.result && j.response.result.items ? j.response.result.items[0] : null; };
   return search('parcel').then(function (j) { var it = item(j); if (it) return it; return search('road').then(item); })
@@ -514,9 +515,10 @@ function lookupAddress(addr) {
         var f = feats(j)[0]; if (f) { out.pnu = f.properties.pnu; out.parcel = f.properties.addr; out.area = Math.round(polyArea(f.geometry) * 10) / 10; }
       }).catch(function () {});
       var layers = VW_LAYERS.map(function (L) {
-        return vw('/req/data', { service: 'data', request: 'GetFeature', data: L[0], geomFilter: pt, geometry: 'false', size: 10, page: 1, errorformat: 'json' }).then(function (j) {
+        return vw('/req/data', { service: 'data', request: 'GetFeature', data: L[0], geomFilter: pt, crs: 'EPSG:4326', geometry: 'false', size: 10, page: 1, errorformat: 'json' }).then(function (j) {
+          var e = vwErr(j); if (e) { out.errs.push(L[0] + ': ' + e); return; }
           feats(j).forEach(function (f) { var nm = f.properties.uname || f.properties.dgm_nm || L[1]; out.uses.push({ name: L[1] === 'zone' ? nm : L[1] + (nm && nm !== L[1] ? ' (' + nm + ')' : ''), rel: '포함' }); if (L[1] === 'zone') out.zone1 = nm; });
-        }).catch(function () {});
+        }).catch(function (e) { out.errs.push(L[0] + ': ' + e.message); });
       });
       return Promise.all([parcel].concat(layers));
     }).then(function () { return out; });
@@ -525,7 +527,7 @@ function applyLookup(o) {
   var p = cur().p, names = (o.uses || []).map(function (u) { return nospace(u.name); }), notes = [];
   p.address = o.full || o.addr; p.pnu = o.pnu || ''; p.landUses = (o.uses || []).map(function (u) { return u.name + (u.rel ? '(' + u.rel + ')' : ''); });
   var z = Object.keys(ZONES).filter(function (k) { return names.indexOf(k) >= 0; })[0] || Object.keys(ZONES).filter(function (k) { return nospace(o.zone1) === k; })[0];
-  if (z) { p.zone = z; notes.push('용도지역: ' + z); }
+  if (z) { p.zone = z; notes.push('용도지역: ' + z); } else notes.push('용도지역 미검출' + (o.errs && o.errs.length ? ' (' + o.errs[0] + ')' : (o.zone1 ? ' (' + o.zone1 + ' — 목록에 없음)' : ' (해당 좌표에 용도지역 도형 없음)')) + ' → 아래에서 직접 선택');
   p.landscapeDistrict = names.some(function (n) { return /경관지구/.test(n); });
   p.districtPlan = names.some(function (n) { return /지구단위계획구역/.test(n); });
   p.greenbelt = names.some(function (n) { return /개발제한구역/.test(n); });
@@ -738,8 +740,9 @@ document.addEventListener('DOMContentLoaded', function () {
   $('#addrBtn').addEventListener('click', function () {
     var a = $('#addrIn').value.trim(); if (!a) { toast('주소를 입력하세요'); return; }
     $('#addrMsg').textContent = '조회 중…';
-    lookupAddress(a).then(function (o) { var notes = applyLookup(o); $('#addrMsg').textContent = '반영: ' + notes.join(' · '); })
-      .catch(function (err) { $('#addrMsg').textContent = err.message + ' — 용도지역·지자체를 직접 선택해도 됩니다.'; });
+    var eum = ' <a href="https://www.eum.go.kr/web/am/amMain.jsp" target="_blank" rel="noopener">토지이음에서 용도지역 확인</a>';
+    lookupAddress(a).then(function (o) { var notes = applyLookup(o); $('#addrMsg').innerHTML = esc('반영: ' + notes.join(' · ')) + (/미검출/.test(notes.join()) ? eum : ''); })
+      .catch(function (err) { $('#addrMsg').innerHTML = esc(err.message + ' — 아래에서 지자체·용도지역을 직접 선택하세요.') + eum; });
   });
   $('#addrIn').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('#addrBtn').click(); });
 
