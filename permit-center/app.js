@@ -579,7 +579,7 @@ function polyArea(g) { // 경위도(EPSG:4326) 다각형 → 국지 평면 근�
   var ring = function (r) { var a = 0; for (var k = 0; k < r.length - 1; k++) a += (r[k][0] * kx) * (r[k + 1][1] * ky) - (r[k + 1][0] * kx) * (r[k][1] * ky); return Math.abs(a) / 2; };
   return polys.reduce(function (s, pl) { return s + ring(pl[0]) - pl.slice(1).reduce(function (h, r) { return h + ring(r); }, 0); }, 0);
 }
-var VW_LAYERS = [['LT_C_UQ111', 'zone'], ['LT_C_UQ112', 'zone'], ['LT_C_UQ113', 'zone'], ['LT_C_UQ114', 'zone'], ['LT_C_UQ121', '경관지구'], ['LT_C_UPISUQ161', '지구단위계획구역'], ['LT_C_UD801', '개발제한구역'], ['LT_C_DAMDAN', '산업단지'], ['LT_C_UQ122', '*'], ['LT_C_UQ123', '*'], ['LT_C_UQ124', '*'], ['LT_C_UQ125', '*'], ['LT_C_UQ126', '*'], ['LT_C_UQ127', '*'], ['LT_C_UQ128', '*'], ['LT_C_UQ129', '*']];
+var VW_LAYERS = [['LT_C_UQ111', 'zone'], ['LT_C_UQ112', 'zone'], ['LT_C_UQ113', 'zone'], ['LT_C_UQ114', 'zone'], ['LT_C_UQ121', '경관지구'], ['LT_C_UPISUQ161', '지구단위계획구역'], ['LT_C_UD801', '개발제한구역'], ['LT_C_DAMDAN', '산업단지'], ['LT_C_UQ123', '*'], ['LT_C_UQ124', '*'], ['LT_C_UQ125', '*'], ['LT_C_UQ126', '*'], ['LT_C_UQ128', '*'], ['LT_C_UQ129', '*']];
 function lookupAddress(addr) {
   var out = { addr: addr, uses: [], errs: [] };
   var vwErr = function (j) { return j && j.response && j.response.status === 'ERROR' ? ((j.response.error && (j.response.error.code + ' ' + (j.response.error.text || ''))) || '오류') : ''; };
