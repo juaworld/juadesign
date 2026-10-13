@@ -1,0 +1,11 @@
+name: permit-center-probe
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: law.go.kr check
+        run: |
+          curl -sS -m 30 -o out.json -w "HTTP %{http_code} / %{time_total}s\n" "https://www.law.go.kr/DRF/lawSearch.do?OC=test&target=ordin&type=JSON&query=%ED%99%94%EC%84%B1%EC%8B%9C%20%EB%8F%84%EC%8B%9C%EA%B3%84%ED%9A%8D%20%EC%A1%B0%EB%A1%80" || true
+          head -c 600 out.json || true
+          curl -sS -m 30 -o /dev/null -w "vworld HTTP %{http_code}\n" "https://api.vworld.kr/req/address" || true
