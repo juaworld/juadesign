@@ -34,7 +34,7 @@ var STORE = 'vpc2_state', KEYSTORE = 'vpc2_vwkey';
 var DEFAULT_P = {
   name: '새 프로젝트', address: '', pnu: '', landUses: [], region: '', zone: '계획관리지역', use: '공장', nbSub: '', owner: '민간', work: '신축',
   siteArea: '', bldgArea: '', gfa: '', gfaFar: '', addArea: '', floorsAbove: '', floorsBelow: '0', height: '', eaves: '', span: '', cantilever: false, flatSlab: false,
-  excavation: '0', hvac: '있음', emp50: '', landCat: '', cutFill: '', growthPlan: false, devCmteEx: '', stWall: '', stChimney: '', stTower: '', stTank: '', stPv: '', stMast: '', stShelter: '', stPark: false, stSilo: false, siteAreaAuto: false, aslLimit: '', aslSrc: '', groundEl: '', parcels: [], zoneMix: [], hLimitNote: '', eumPrice: '', eumMark3: '', heightDistrict: false, heritageZone: false, flightZone: false, hLimit: '', hLimitSrc: '', northDist: '', rooms: '', households: '', industrialComplex: false, landscapeDistrict: false, keyLandscapeArea: false,
+  excavation: '0', hvac: '있음', emp50: '', landCat: '', cutFill: '', growthPlan: false, devCmteEx: '', stWall: '', stChimney: '', stTower: '', stTank: '', stPv: '', stMast: '', stShelter: '', stPark: false, stSilo: false, siteAreaAuto: false, locks: {}, lockOrig: {}, aslLimit: '', aslSrc: '', groundEl: '', parcels: [], zoneMix: [], hLimitNote: '', eumPrice: '', eumMark3: '', heightDistrict: false, heritageZone: false, flightZone: false, hLimit: '', hLimitSrc: '', northDist: '', rooms: '', households: '', industrialComplex: false, landscapeDistrict: false, keyLandscapeArea: false,
   districtPlan: false, greenbelt: false, separateAdd: false, mountain: '없음', parkingFloor: false, combustible750: false, trafficZone: '',
   parkingPlan: '', disabledParkingPlan: '', landscapePlan: '', bcrLimit: '', farLimit: '', epi: '', bf: {}, scapeAns: {}
 };
@@ -438,7 +438,7 @@ function numericChecks(prj) {
   }
   var H = num(p.height), hFlags = [];
   if (p.heightDistrict) hFlags.push('고도지구'); if (p.districtPlan) hFlags.push('지구단위계획'); if (p.landscapeDistrict) hFlags.push('경관지구'); if (p.heritageZone) hFlags.push('국가유산 주변'); if (p.flightZone && !num(p.aslLimit)) hFlags.push('비행안전구역·공항');
-  if (num(p.hLimit) > 0) out.push({ rid: 'permit', label: '최고높이', val: H ? fmt(H) + 'm' : '미입력', lim: fmt(num(p.hLimit)) + 'm 이하 (' + (p.hLimitSrc || '직접 입력') + ')', ok: H ? H <= num(p.hLimit) : null, note: (H && H <= num(p.hLimit) && num(p.hLimit) - H < 1 ? '여유 1m 미만 — 옥탑·파라펫·설비 높이 포함 여부 재확인. ' : '') + (p.hLimitNote && (!H || H > num(p.hLimit)) ? p.hLimitNote + ' 가능' : '') });
+  if (num(p.hLimit) > 0) out.push({ rid: 'permit', label: '최고높이', val: H ? fmt(H) + 'm' : '미입력', lim: fmt(num(p.hLimit)) + 'm 이하 (' + (p.hLimitSrc || '직접 입력') + ')' + (p.lockOrig && p.lockOrig.hLimit != null && String(p.lockOrig.hLimit) !== String(p.hLimit) ? ' ⚠ 법규값 ' + p.lockOrig.hLimit + 'm에서 수동 변경' : ''), ok: H ? H <= num(p.hLimit) : null, note: (H && H <= num(p.hLimit) && num(p.hLimit) - H < 1 ? '여유 1m 미만 — 옥탑·파라펫·설비 높이 포함 여부 재확인. ' : '') + (p.hLimitNote && (!H || H > num(p.hLimit)) ? p.hLimitNote + ' 가능' : '') });
   else if (hFlags.length) out.push({ rid: 'permit', label: '최고높이', val: H ? fmt(H) + 'm' : '미입력', lim: hFlags.join('·') + ' 결정 높이 — 공개 데이터에 수치 없음, 확인 후 입력', ok: null, note: (p.pnu ? '주소란 아래 "토지이음에서 이 필지 열람" → 층수·높이제한 탭. ' : '') + '고도지구·지구단위계획: 토지이음 도시계획 결정도 / 국가유산: 국가유산청 현상변경 허용기준 / 비행안전구역: 관할 부대 협의 / 공항: 장애물제한표면' });
   if (num(p.aslLimit) > 0) { var g = num(p.groundEl), hasG = p.groundEl !== '' && p.groundEl != null; out.push({ rid: 'permit', label: '해발 고도제한', val: hasG && H ? '지반 ' + fmt(g) + 'm + 건물 ' + fmt(H) + 'm = 해발 ' + fmt(g + H) + 'm' : (H ? '건물 ' + fmt(H) + 'm (지반고 미입력)' : '미입력'), lim: '해발 ' + fmt(num(p.aslLimit)) + 'm 이하 → 건물 최대 ' + (hasG ? fmt(num(p.aslLimit) - g) + 'm' : '(해발 − 지반고)') + ' (' + p.aslSrc + ')', ok: hasG && H ? g + H <= num(p.aslLimit) : null, note: hasG ? '옥탑·피뢰침·안테나 포함 최상단 기준' : '"대지 지반고(해발)" 칸에 측량도 지반고를 넣으면 판정' }); }
   if (/전용주거|일반주거/.test(p.zone) && H > 0) { var nNeed = H <= 10 ? 1.5 : H / 2, nHas = p.northDist !== '' && p.northDist != null; out.push({ rid: 'permit', label: '정북방향 일조 이격', val: nHas ? fmt(num(p.northDist)) + 'm' : '미입력', lim: fmt(nNeed, 2) + 'm 이상 (높이 ' + fmt(H) + 'm: 10m 이하 부분 1.5m, 초과 부분은 높이의 1/2 — 건축법 시행령 제86조)', ok: nHas ? num(p.northDist) >= nNeed : null, note: '최고 높이 부분 기준. 정북 방향이 도로·공원·하천 등에 접하면 완화 (제86조제3항)' }); }
@@ -651,6 +651,22 @@ function removeParcel(i) {
   if (!p.parcels.length) { p.pnu = ''; save(); renderAll(); return; }
   p.siteAreaAuto = true; var notes = applyParcels(); $('#addrMsg').innerHTML = esc('필지 삭제 후 재계산: ' + notes.join(' · '));
 }
+var LOCK_LABEL = { hLimit: '최고높이 제한', hLimitSrc: '제한 근거', aslLimit: '해발 고도제한', heightDistrict: '고도지구', flightZone: '비행안전구역' };
+function applyLocks() {
+  var p = cur().p, L = p.locks || {}, O = p.lockOrig || {};
+  if (!document.getElementById('lockCss')) { var st = document.createElement('style'); st.id = 'lockCss'; st.textContent = '.locked{background:var(--surface2)!important;color:var(--ink)!important;border-style:dashed!important;cursor:not-allowed}.lockbtn{align-self:flex-start;font-size:11.5px;padding:2px 8px;margin-top:2px;border-radius:99px;background:var(--good-bg);color:var(--good);border:1px solid transparent;cursor:pointer}.lockbtn.mod{background:var(--warn-bg);color:var(--warn)}'; document.head.appendChild(st); }
+  Array.prototype.forEach.call(document.querySelectorAll('.panel[data-tab="info"] [data-f]'), function (el) {
+    var k = el.dataset.f, isCk = el.type === 'checkbox', wrap = el.closest('label') || el.parentNode, olds = wrap.querySelectorAll('.lockbtn[data-lk="' + k + '"]'); Array.prototype.forEach.call(olds, function (o) { o.remove(); });
+    var locked = !!L[k];
+    if (isCk || el.tagName === 'SELECT') el.disabled = locked; else el.readOnly = locked;
+    el.classList.toggle('locked', locked);
+    var b = null;
+    if (locked) { b = document.createElement('button'); b.type = 'button'; b.className = 'lockbtn'; b.dataset.unlock = k; b.textContent = '법규값 잠김 · 수정'; b.title = '주소 조회로 가져온 법적 지정값입니다. 수정하려면 클릭'; }
+    else if (O[k] != null && String(O[k]) !== String(p[k])) { b = document.createElement('button'); b.type = 'button'; b.className = 'lockbtn mod'; b.dataset.relock = k; b.textContent = '수정됨 (법규값 ' + (O[k] === true ? '해당' : O[k] === false ? '아님' : O[k]) + ') · 되돌리기'; }
+    else if (O[k] != null) { b = document.createElement('button'); b.type = 'button'; b.className = 'lockbtn mod'; b.dataset.relock = k; b.textContent = '다시 잠그기'; }
+    if (b) { b.dataset.lk = k; if (isCk) b.style.marginLeft = '6px'; wrap.appendChild(b); }
+  });
+}
 var EUM_URL = function (pnu) { return 'https://www.eum.go.kr/web/ar/lu/luLandDet.jsp?pnu=' + encodeURIComponent(pnu) + '&mode=search&isNoScr=script&selGbn=umd'; };
 function eumFetch(pnu) {
   return fetch(EUM_URL(pnu)).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); }).then(function (buf) {
@@ -708,6 +724,9 @@ function applyLookup(o) {
   if (!hm && dpNames.length) notes.push(dpNames.join(', ') + ' → 최고높이는 지구단위계획 결정도서(구역별 높이계획)에만 있고 공개 데이터에 수치가 없음' + (/문의/.test(dpNames.join()) ? ' — 토지이음 표기대로 해당 구청 도시계획과 확인' : '') + '. 확인한 값은 "최고높이 제한" 칸에 입력');
   else if (!hm && !p.heightDistrict && E) notes.push('높이: 고도지구·지구단위계획 등 높이 제한 지역 아님 (토지이음 기준)' + (/전용주거|일반주거/.test(p.zone) ? ' — 정북 일조 이격만 검토' : ''));
   if (hm) {} else if (p.heightDistrict) { var hv = autoHeight(p); if (hv) { p.hLimit = String(hv.h); p.hLimitSrc = '고도지구'; notes.push('고도지구 최고높이 ' + hv.h + 'm 자동 입력 (' + hv.src + ')'); } else notes.push('고도지구' + (p.hdKey ? '(고시 ' + p.hdKey + ')' : '') + ' 높이는 공개 데이터에 없음 → 토지이음 열람 후 관리자 화면 "고도지구 최고높이"에 한 번 등록하면 같은 고도지구는 이후 자동 입력'); }
+  var LK = {}; if (hm || (typeof hv !== 'undefined' && hv)) { LK.hLimit = 1; LK.hLimitSrc = 1; } if (aslM) LK.aslLimit = 1; if (p.heightDistrict) LK.heightDistrict = 1; if (p.flightZone) LK.flightZone = 1;
+  p.locks = {}; p.lockOrig = {}; Object.keys(LK).forEach(function (k) { p.locks[k] = true; p.lockOrig[k] = p[k]; });
+  if (Object.keys(LK).length) notes.push('법규 높이값 잠금 (수정하려면 칸 옆 [수정] 클릭)');
   if (o.full) notes.unshift('대지: ' + o.full);
   save(); ensureDetail(p); renderAll();
   return notes;
@@ -788,6 +807,7 @@ function renderRegionSel() {
 }
 function bindForm() {
   var p = cur().p;
+  setTimeout(applyLocks, 0);
   $$('[data-f]').forEach(function (el) { var k = el.dataset.f; if (el.type === 'checkbox') el.checked = !!p[k]; else el.value = p[k] == null ? '' : p[k]; });
   $$('[data-bf]').forEach(function (el) { el.value = p.bf && p.bf[el.dataset.bf] != null ? p.bf[el.dataset.bf] : ''; });
   $('#nbWrap').hidden = !/근린생활/.test(p.use); $('#roomWrap').hidden = p.use !== '숙박시설'; $('#empWrap').hidden = p.use !== '공장';
@@ -902,7 +922,7 @@ function renderMeta() {
 }
 function renderProjectSel() { $('#prjSel').innerHTML = state.projects.map(function (x) { return opt(x.id, state.cur, x.p.name); }).join(''); }
 function renderAll() { renderProjectSel(); bindForm(); renderApp(); renderFiles(); renderNums(); renderReport(); renderLocal(); renderMeta(); renderLive(); }
-function softRender() { renderRegionSel(); renderApp(); renderChecklist(); renderNums(); renderReport(); renderLive(); }
+function softRender() { renderRegionSel(); renderApp(); renderChecklist(); renderNums(); renderReport(); renderLive(); applyLocks(); }
 function renderLive() {
   var box = document.getElementById('liveNums'); if (!box) return;
   var prj = cur(), p = prj.p, L = limits(p), nums = numericChecks(prj), app = applicability(p), site = num(p.siteArea), ks = Object.keys(app);
@@ -967,6 +987,8 @@ document.addEventListener('DOMContentLoaded', function () {
   });
   document.addEventListener('click', function (e) {
     var rp = e.target.closest('[data-rmparcel]'); if (rp) { removeParcel(+rp.dataset.rmparcel); return; }
+    var ul = e.target.closest('[data-unlock]'); if (ul) { e.preventDefault(); var pu = cur().p; delete pu.locks[ul.dataset.unlock]; save(); applyLocks(); var fe = document.querySelector('.panel[data-tab="info"] [data-f="' + ul.dataset.unlock + '"]'); if (fe) fe.focus(); toast((LOCK_LABEL[ul.dataset.unlock] || '값') + ' 잠금 해제 — 법규값과 다르게 바꾸면 "수정됨"으로 표시됩니다'); return; }
+    var rl = e.target.closest('[data-relock]'); if (rl) { e.preventDefault(); var pr2 = cur().p, k2 = rl.dataset.relock; pr2[k2] = pr2.lockOrig[k2]; pr2.locks[k2] = true; save(); renderAll(); toast((LOCK_LABEL[k2] || '값') + ' 법규값으로 되돌리고 잠금'); return; }
     var b = e.target.closest('[data-sa]'); if (b) { cur().p.scapeAns[b.dataset.sa] = b.dataset.v; save(); renderAll(); }
   });
   $('#fileList').addEventListener('click', function (e) {
