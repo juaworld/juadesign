@@ -28,7 +28,7 @@ jobs:
           git config user.name "permit-center-bot"
           git config user.email "actions@users.noreply.github.com"
           git add permit-center/data
-          if git diff --cached --quiet; then echo "변경 없음"; else git commit -m "가상인허가센터 데이터 자동 동기화 $(date -u +%F)" && git push; fi
+          if git diff --cached --quiet; then echo "변경 없음"; else git commit -m "가상인허가센터 데이터 자동 동기화 $(date -u +%F)" && git pull --rebase origin main && git push; fi
       - name: 개정 감지 이슈 등록
         if: hashFiles('permit-center/scripts/issue.md') != ''
         env:
