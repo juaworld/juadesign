@@ -81,6 +81,7 @@ function koN(s) {
   var t = 0; if (m[1]) t += +m[1] * 10000; if (s.indexOf('천') >= 0) t += (m[2] ? +m[2] : 1) * 1000; if (s.indexOf('백') >= 0) t += (m[3] ? +m[3] : 1) * 100; if (m[4]) t += +m[4]; return t;
 }
 var ZONE_GROUP = { '녹지지역': /녹지/, '관리지역': /관리지역/, '농림지역': /농림/, '자연환경보전지역': /자연환경보전/, '공업지역': /공업/, '상업지역': /상업/, '주거지역': /주거/ };
+var HO = { '단독주택': 1, '공동주택': 2, '제1종근린생활시설': 3, '제2종근린생활시설': 4, '문화및집회시설': 5, '종교시설': 6, '판매시설': 7, '의료시설': 9, '교육연구시설': 10, '노유자시설': 11, '수련시설': 12, '운동시설': 13, '업무시설': 14, '숙박시설': 15, '위락시설': 16, '공장': 17, '창고시설': 18, '위험물저장및처리시설': 19, '자동차관련시설': 20, '방송통신시설': 24 };
 var USE_KW = { '공동주택': ['공동주택'], '공장': ['공장'], '창고시설': ['창고'], '숙박시설': ['숙박'], '판매시설': ['판매시설'], '업무시설': ['업무시설'], '문화및집회시설': ['문화 및 집회', '문화및집회'], '위락시설': ['위락'], '의료시설': ['의료시설'], '종교시설': ['종교시설'], '교육연구시설': ['교육연구'], '운동시설': ['운동시설'] };
 function evalScapeClause(c, p, ctx) {
   var t = c.intro + ' ' + c.text, res = { met: [], fail: [], ask: null };
@@ -91,9 +92,13 @@ function evalScapeClause(c, p, ctx) {
   if (/지방자치단체|공공기관|지방공기업|공공건축물/.test(c.text.replace(/지방자치단체의 조례/g, '')) && !/경관지구|중점/.test(c.text)) { if (p.owner !== '민간') res.met.push('공공 건축주'); else res.fail.push('민간 건축주'); }
   var zg = Object.keys(ZONE_GROUP).filter(function (g) { return t.indexOf(g) >= 0; });
   if (zg.length) { if (zg.some(function (g) { return ZONE_GROUP[g].test(p.zone); })) res.met.push(p.zone); else res.fail.push(zg.join('·') + ' 아님'); }
-  var plain = c.text.replace(/「[^」]*」/g, '').replace(/별표\s*1\s*제\d+호(의\d+)?(\s*[가-힣]목)?/g, '');
+  var plain = c.text.replace(/「[^」]*」/g, '').replace(/별표\s*1\s*제\d+호(의\d+)?(\s*[가-힣]목)?/g, '').replace(/다만[^.]*제외[^.]*\./g, '');
   var uses = Object.keys(USE_KW).filter(function (u) { return USE_KW[u].some(function (k) { return plain.indexOf(k) >= 0; }); });
   if (uses.length) { if (uses.indexOf(p.use) >= 0) res.met.push(p.use); else res.fail.push(uses.join('·') + ' 용도 아님'); }
+  var rng = c.text.match(/별표\s*1\s*제(\d+)호부터\s*제(\d+)호까지/), ho = HO[p.use] || 99;
+  if (rng) { if (ho >= +rng[1] && ho <= +rng[2]) res.met.push('별표1 제' + rng[1] + '~' + rng[2] + '호 용도'); else res.fail.push('별표1 제' + rng[1] + '~' + rng[2] + '호 용도 아님'); }
+  var exm = c.text.match(/다만[^.]*?((?:제\d+호[,·ㆍ및\s]*)+)[^.]*?제외/);
+  if (exm && exm[1].match(/\d+/g).map(Number).indexOf(ho) >= 0) res.fail.push('단서에서 ' + p.use + '(제' + ho + '호) 제외');
   if (/제2조제17호/.test(t)) { if (ctx.multiuse) res.met.push('다중이용건축물'); else res.fail.push('다중이용건축물 아님'); }
   var size = [], sizeOk = false, m;
   if ((m = t.match(/(\d+)\s*층\s*(이상|초과)/))) { size.push(m[0]); if (num(p.floorsAbove) > +m[1] || (m[2] === '이상' && num(p.floorsAbove) >= +m[1])) sizeOk = true; }
@@ -117,6 +122,7 @@ function scapeEval(p, ctx) {
   if (!det.scape || !det.scape.bldText) { if (out.lvl === 'no') out.why.push('해당 지자체 경관조례에 건축물 심의대상 조항이 없음 → 경관지구·중점경관관리구역·공공건축물(법정)만 대상'); if (p.owner !== '민간' && out.lvl === 'no') { out.lvl = 'req'; out.why.push('공공건축물 — 경관법 제28조제1항제3호'); } return out; }
   var cl = splitClauses(det.scape.bldText);
   cl.forEach(function (c) {
+    if (/제외|생략|아니할 수|하지 않을 수|적용하지/.test(c.intro + (c.intro ? '' : c.text.slice(0, 60)))) return;
     var r = evalScapeClause(c, p, ctx); c.res = r; out.clauses.push(c);
     var short = (c.text.length > 90 ? c.text.slice(0, 90) + '…' : c.text);
     if (!r.fail.length && !r.ask && r.met.length) { out.lvl = 'req'; out.why.push('해당: ' + short + ' (' + r.met.join(', ') + ')'); }
