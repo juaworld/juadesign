@@ -34,7 +34,7 @@ var STORE = 'vpc2_state', KEYSTORE = 'vpc2_vwkey';
 var DEFAULT_P = {
   name: '새 프로젝트', address: '', pnu: '', landUses: [], region: '', zone: '계획관리지역', use: '공장', nbSub: '', owner: '민간', work: '신축',
   siteArea: '', bldgArea: '', gfa: '', gfaFar: '', addArea: '', floorsAbove: '', floorsBelow: '0', height: '', eaves: '', span: '', cantilever: false, flatSlab: false,
-  excavation: '0', hvac: '있음', emp50: '', landCat: '', cutFill: '', growthPlan: false, devCmteEx: '', stWall: '', stChimney: '', stTower: '', stTank: '', stPv: '', stMast: '', stShelter: '', stPark: false, stSilo: false, siteAreaAuto: false, hLimitNote: '', eumPrice: '', eumMark3: '', heightDistrict: false, heritageZone: false, flightZone: false, hLimit: '', hLimitSrc: '', northDist: '', rooms: '', households: '', industrialComplex: false, landscapeDistrict: false, keyLandscapeArea: false,
+  excavation: '0', hvac: '있음', emp50: '', landCat: '', cutFill: '', growthPlan: false, devCmteEx: '', stWall: '', stChimney: '', stTower: '', stTank: '', stPv: '', stMast: '', stShelter: '', stPark: false, stSilo: false, siteAreaAuto: false, parcels: [], zoneMix: [], hLimitNote: '', eumPrice: '', eumMark3: '', heightDistrict: false, heritageZone: false, flightZone: false, hLimit: '', hLimitSrc: '', northDist: '', rooms: '', households: '', industrialComplex: false, landscapeDistrict: false, keyLandscapeArea: false,
   districtPlan: false, greenbelt: false, separateAdd: false, mountain: '없음', parkingFloor: false, combustible750: false, trafficZone: '',
   parkingPlan: '', disabledParkingPlan: '', landscapePlan: '', bcrLimit: '', farLimit: '', epi: '', bf: {}, scapeAns: {}
 };
@@ -65,6 +65,16 @@ function limits(p) {
   else if (pu === 'national') { parkUnit = natUnit(p.use); parkSrc = '조례 → 주차장법 시행령 별표1'; }
   else if (r && r.park && typeof r.park['기타'] === 'number' && !PARK_NAT[p.use]) { parkUnit = r.park['기타']; parkSrc = '조례 별표(그 밖의 건축물)'; }
   else { parkUnit = natUnit(p.use); parkSrc = r && r.has && r.has.park ? '조례에 별도 항목 없음 → 주차장법 시행령 별표1' : '주차장법 시행령 별표1'; }
+  var mix = (p.zoneMix || []).filter(function (m) { return m.area > 0 && ZONES[m.zone]; });
+  if (mix.length > 1) {
+    var tot = mix.reduce(function (a, m) { return a + m.area; }, 0), small = Math.min.apply(null, mix.map(function (m) { return m.area; }));
+    var zv = function (z, k) { return (k === 'b' ? (r && r.bcr[z]) || ZONES[z][0] : (r && r.far[z]) || ZONES[z][1]); };
+    var wb = Math.round(mix.reduce(function (a, m) { return a + zv(m.zone, 'b') * m.area; }, 0) / tot * 100) / 100, wf = Math.round(mix.reduce(function (a, m) { return a + zv(m.zone, 'f') * m.area; }, 0) / tot * 100) / 100;
+    var mixTxt = mix.map(function (m) { return m.zone + ' ' + fmt(m.area) + '㎡(' + zv(m.zone, 'b') + '/' + zv(m.zone, 'f') + '%)'; }).join(' + ');
+    var how = small <= 330 ? '가장 작은 부분 ' + fmt(small) + '㎡ ≤ 330㎡ → 전체 대지 가중평균 적용' : '가장 작은 부분 ' + fmt(small) + '㎡ > 330㎡ → 부분별로 각각 적용(아래 값은 전체 상한)';
+    if (!num(p.bcrLimit)) { bcr = wb; bcrSrc = '용도지역 혼재 가중평균: ' + mixTxt + ' — ' + how + ' (국토계획법 제84조)'; }
+    if (!num(p.farLimit)) { far = wf; farSrc = '용도지역 혼재 가중평균 (국토계획법 제84조)'; }
+  }
   var dis = r && r.disabledPct != null ? r.disabledPct : null;
   return { bcr: bcr, far: far, bcrSrc: bcrSrc, farSrc: farSrc, parkUnit: parkUnit, parkSrc: parkSrc, disPct: dis == null ? 4 : dis, disSrc: dis == null ? '조례값 미확인 → 상한 4% 적용' : '조례 ' + dis + '%' };
 }
@@ -408,11 +418,17 @@ function numericChecks(prj) {
   if (num(p.gfa) > 0 && ['단독주택', '공동주택'].indexOf(p.use) < 0) {
     needPark = Math.round(num(p.gfa) / L.parkUnit + 0.0001); if (num(p.gfa) / L.parkUnit % 1 >= 0.5) needPark = Math.ceil(num(p.gfa) / L.parkUnit); else needPark = Math.floor(num(p.gfa) / L.parkUnit);
     var has = p.parkingPlan !== '';
-    out.push({ rid: 'permit', label: '부설주차 대수', val: has ? num(p.parkingPlan) + '대' : '미입력', lim: needPark + '대 이상 (시설면적 ' + L.parkUnit + '㎡당 1대, ' + L.parkSrc + ')', ok: has ? num(p.parkingPlan) >= needPark : null, note: '소수점 0.5 이상 1대 (시행령 별표1 비고6), 시설면적은 주차 바닥면적 제외' });
+    out.push({ rid: 'permit', need: needPark, label: '부설주차 대수', val: has ? num(p.parkingPlan) + '대' : '미입력', lim: needPark + '대 이상 (시설면적 ' + L.parkUnit + '㎡당 1대, ' + L.parkSrc + ')', ok: has ? num(p.parkingPlan) >= needPark : null, note: '소수점 0.5 이상 1대 (시행령 별표1 비고6), 시설면적은 주차 바닥면적 제외' });
   }
-  if (app.ba.lvl === 'req' && Math.max(num(p.parkingPlan), needPark) >= 10) {
-    var base = Math.max(num(p.parkingPlan), needPark), need = Math.ceil(base * L.disPct / 100), has2 = p.disabledParkingPlan !== '';
-    out.push({ rid: 'ba', label: '장애인전용 주차구획', val: has2 ? num(p.disabledParkingPlan) + '대' : '미입력', lim: need + '대 이상 (' + L.disSrc + ')', ok: has2 ? num(p.disabledParkingPlan) >= need : null });
+  var base = Math.max(num(p.parkingPlan), needPark), has2 = p.disabledParkingPlan !== '' && p.disabledParkingPlan != null, dVal = has2 ? num(p.disabledParkingPlan) + '대' : '미입력';
+  if (base > 0) {
+    if (base < 10) out.push({ rid: 'ba', need: 0, label: '장애인전용 주차구획', val: has2 ? dVal : '-', lim: '부설주차 ' + base + '대(10대 미만) → 설치 의무 없음 (편의증진법 시행령 별표2)', ok: true });
+    else {
+      var need = Math.max(1, Math.ceil(base * L.disPct / 100)), basis = '부설주차 ' + base + '대 × ' + L.disPct + '% 올림';
+      if (app.ba.lvl === 'req') out.push({ rid: 'ba', need: need, label: '장애인전용 주차구획', val: dVal, lim: need + '대 이상 (' + basis + ', ' + L.disSrc + ')', ok: has2 ? num(p.disabledParkingPlan) >= need : null, note: '구획 3.3m×5.0m 이상, 출입구 가까운 곳' });
+      else if (app.ba.lvl === 'ask') out.push({ rid: 'ba', need: need, label: '장애인전용 주차구획', val: dVal, lim: (p.use === '공장' ? '상시근로자 50명 이상 사업주 공장이면 ' : '편의시설 대상이면 ') + need + '대 이상 (' + basis + ')', ok: null, note: '② 대상 판정의 장애인 편의시설 질문에 답하면 확정' });
+      else out.push({ rid: 'ba', need: 0, label: '장애인전용 주차구획', val: has2 ? dVal : '-', lim: p.use + ' — 편의시설 설치 대상 아님 → 장애인전용주차 의무 없음', ok: true });
+    }
   }
   var ln = landscapeNeed(prj);
   if (site > 0) {
@@ -602,6 +618,38 @@ function lookupAddress(addr) {
       return Promise.all([parcel].concat(layers));
     }).then(function () { return out.pnu ? eumFetch(out.pnu).then(function (e) { out.eum = e; }, function (e) { out.errs.push('토지이음: ' + e.message); }) : null; }).then(function () { window.VPC_LASTERR = out.errs; return out; });
 }
+var READY_J = ['대', '공장용지', '창고용지', '주차장', '주유소용지', '학교용지', '종교용지'];
+function parcelZone(o) { var ns = (o.uses || []).map(function (u) { return nospace(u.name); }).concat(o.eum ? o.eum.marks.map(nospace) : []); return Object.keys(ZONES).filter(function (k) { return ns.indexOf(k) >= 0; })[0] || nospace(o.zone1 || ''); }
+function parcelArea(o) { return (o.eum && o.eum.area) || o.area || 0; }
+function combineParcels(list) {
+  if (list.length === 1) { var one = Object.assign({}, list[0]); one.zoneMix = null; return one; }
+  var seen = {}, uses = [], marks = [], zm = {}, errs = [];
+  list.forEach(function (o) {
+    (o.uses || []).forEach(function (u) { if (!seen['u' + u.name]) { seen['u' + u.name] = 1; uses.push(u); } });
+    (o.eum ? o.eum.marks : []).forEach(function (m) { if (!seen['m' + m]) { seen['m' + m] = 1; marks.push(m); } });
+    var z = parcelZone(o); if (z) zm[z] = (zm[z] || 0) + parcelArea(o); errs = errs.concat(o.errs || []);
+  });
+  var ej = list.map(function (o) { return o.eum && o.eum.jimok; }).filter(Boolean), worst = ej.filter(function (j) { return READY_J.indexOf(j) < 0; })[0] || ej[0];
+  var big = list.slice().sort(function (a, b) { return parcelArea(b) - parcelArea(a); })[0];
+  return { addr: list[0].addr, full: (list[0].full || list[0].addr) + ' 외 ' + (list.length - 1) + '필지', pnu: list.map(function (o) { return o.pnu || ''; }).join(','), uses: uses, zone1: big.zone1, area: list.reduce(function (a, o) { return a + (o.area || 0); }, 0), jimok: list[0].jimok, errs: errs, hd: list.map(function (o) { return o.hd; }).filter(Boolean)[0],
+    eum: list.some(function (o) { return o.eum; }) ? { jimok: worst || '', area: Math.round(list.reduce(function (a, o) { return a + parcelArea(o); }, 0) * 10) / 10, price: '', m1: [], m2: [], m3: '', marks: marks } : null, zoneMix: zm, multi: list.length };
+}
+function slimParcel(o) { return { addr: o.addr, full: o.full, pnu: o.pnu, area: o.area, jimok: o.jimok, uses: o.uses, zone1: o.zone1, hd: o.hd, errs: [], eum: o.eum ? { jimok: o.eum.jimok, area: o.eum.area, marks: o.eum.marks, m1: [], m2: [], m3: '', price: '' } : null }; }
+function applyParcels() { var p = cur().p; return applyLookup(combineParcels(p.parcels)); }
+function addParcel(a) {
+  var p = cur().p; if (!p.parcels || !p.parcels.length) return runLookup(a);
+  $('#addrMsg').textContent = '추가 대지 조회 중…';
+  return lookupAddress(a).then(function (o) {
+    if (p.parcels.some(function (x) { return x.pnu && x.pnu === o.pnu; })) { toast('이미 추가된 필지입니다'); $('#addrMsg').textContent = ''; return; }
+    p.parcels.push(slimParcel(o)); var notes = applyParcels();
+    $('#addrMsg').innerHTML = esc('대지 ' + p.parcels.length + '필지 합산 반영: ' + notes.join(' · '));
+  }).catch(function (err) { $('#addrMsg').innerHTML = esc('추가 실패: ' + err.message) + EUM; });
+}
+function removeParcel(i) {
+  var p = cur().p; p.parcels.splice(i, 1);
+  if (!p.parcels.length) { p.pnu = ''; save(); renderAll(); return; }
+  p.siteAreaAuto = true; var notes = applyParcels(); $('#addrMsg').innerHTML = esc('필지 삭제 후 재계산: ' + notes.join(' · '));
+}
 var EUM_URL = function (pnu) { return 'https://www.eum.go.kr/web/ar/lu/luLandDet.jsp?pnu=' + encodeURIComponent(pnu) + '&mode=search&isNoScr=script&selGbn=umd'; };
 function eumFetch(pnu) {
   return fetch(EUM_URL(pnu)).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); }).then(function (buf) {
@@ -622,6 +670,8 @@ function applyLookup(o) {
   if (E) { p.eumPrice = E.price; p.eumMark3 = E.m3; }
   var z = Object.keys(ZONES).filter(function (k) { return names.indexOf(k) >= 0; })[0] || Object.keys(ZONES).filter(function (k) { return nospace(o.zone1) === k; })[0];
   if (z) { p.zone = z; notes.push('용도지역: ' + z); } else notes.push('용도지역 미검출' + (o.errs && o.errs.length ? ' (' + o.errs[0] + ')' : (o.zone1 ? ' (' + o.zone1 + ' — 목록에 없음)' : ' (해당 좌표에 용도지역 도형 없음)')) + ' → 아래에서 직접 선택');
+  if (o.zoneMix && Object.keys(o.zoneMix).length > 1) { var zs = Object.keys(o.zoneMix).sort(function (a, b) { return o.zoneMix[b] - o.zoneMix[a]; }); if (ZONES[zs[0]]) p.zone = zs[0]; p.zoneMix = zs.map(function (k) { return { zone: k, area: Math.round(o.zoneMix[k] * 10) / 10 }; }); notes.push('용도지역 혼재: ' + zs.map(function (k) { return k + ' ' + fmt(o.zoneMix[k]) + '㎡'; }).join(' + ') + ' → 건폐율·용적률 가중평균, 그 밖의 건축제한은 가장 넓은 ' + zs[0] + ' 기준 (국토계획법 제84조)'); }
+  else p.zoneMix = [];
   p.landscapeDistrict = names.some(function (n) { return /경관지구/.test(n); });
   p.districtPlan = names.some(function (n) { return /지구단위계획구역/.test(n); });
   p.greenbelt = names.some(function (n) { return /개발제한구역/.test(n); });
@@ -644,11 +694,11 @@ function applyLookup(o) {
   if (names.some(function (n) { return /비행안전|비행장|공항/.test(n); })) p.flightZone = true;
   var exz = names.filter(function (n) { return /자연취락지구|개발진흥지구|기반시설부담구역|준산업단지|공장입지유도지구/.test(n); });
   if (exz.length) { p.devCmteEx = '예'; notes.push(exz[0] + ' → 개발행위 도시계획위원회 심의 예외 해당'); }
-  if (E && E.area && (!p.siteArea || p.siteAreaAuto !== false)) { p.siteArea = String(E.area); p.siteAreaAuto = true; notes.push('대지면적(토지대장): ' + fmt(E.area) + '㎡'); }
+  if (E && E.area && (!p.siteArea || p.siteAreaAuto !== false)) { p.siteArea = String(E.area); p.siteAreaAuto = true; notes.push('대지면적(토지대장' + (o.multi ? ', ' + o.multi + '필지 합산' : '') + '): ' + fmt(E.area) + '㎡'); }
   else if (o.area && (!p.siteArea || p.siteAreaAuto !== false)) { p.siteArea = String(o.area); p.siteAreaAuto = true; notes.push('대지면적(지적도 도형 계산, 공부면적과 소폭 차이 가능): ' + fmt(num(o.area)) + '㎡'); }
   if (E && E.price) notes.push('공시지가 ' + E.price);
   var best = matchRegion(p.address); if (best) { p.region = best; notes.push('지자체: ' + best); }
-  var hdName = (E ? E.marks : []).filter(function (n) { return /고도지구/.test(n); })[0] || '', hm = hdName.match(/(\d+(?:\.\d+)?)\s*m\s*이하/), hx = hdName.match(/완화[^\d]*(\d+(?:\.\d+)?)\s*m/);
+  var hdName = (E ? E.marks : []).filter(function (n) { return /고도지구/.test(n); }).sort(function (a, b) { var x = a.match(/(\d+(?:\.\d+)?)\s*m/), y = b.match(/(\d+(?:\.\d+)?)\s*m/); return (x ? +x[1] : 1e9) - (y ? +y[1] : 1e9); })[0] || '', hm = hdName.match(/(\d+(?:\.\d+)?)\s*m\s*이하/), hx = hdName.match(/완화[^\d]*(\d+(?:\.\d+)?)\s*m/);
   if (hdName) p.heightDistrict = true;
   if (hm) { p.hLimit = hm[1]; p.hLimitSrc = '고도지구'; p.hLimitNote = hx ? '경관 가이드라인 등 완화 시 ' + hx[1] + 'm' : ''; notes.push(hdName + ' → 최고높이 ' + hm[1] + 'm 자동 입력' + (hx ? ' (완화 시 ' + hx[1] + 'm)' : '')); }
   else if (p.heightDistrict) { var hv = autoHeight(p); if (hv) { p.hLimit = String(hv.h); p.hLimitSrc = '고도지구'; notes.push('고도지구 최고높이 ' + hv.h + 'm 자동 입력 (' + hv.src + ')'); } else notes.push('고도지구' + (p.hdKey ? '(고시 ' + p.hdKey + ')' : '') + ' 높이는 공개 데이터에 없음 → 토지이음 열람 후 관리자 화면 "고도지구 최고높이"에 한 번 등록하면 같은 고도지구는 이후 자동 입력'); }
@@ -678,7 +728,7 @@ function hasVwKey() { return !!(lsGet(KEYSTORE) || (window.VPC_SETTINGS && VPC_S
 function runLookup(a, alt) {
   $('#addrMsg').textContent = '조회 중…';
   return lookupAddress(a).catch(function (e) { if (alt && !/키/.test(e.message)) return lookupAddress(alt); throw e; })
-    .then(function (o) { var notes = applyLookup(o); $('#addrMsg').innerHTML = esc('반영: ' + notes.join(' · ')) + (/미검출/.test(notes.join()) ? EUM : ''); })
+    .then(function (o) { cur().p.parcels = [slimParcel(o)]; var notes = applyLookup(o); $('#addrMsg').innerHTML = esc('반영: ' + notes.join(' · ')) + (/미검출/.test(notes.join()) ? EUM : ''); })
     .catch(function (err) {
       var p = cur().p, r = matchRegion(a), extra = '';
       if (r) { p.address = fullAddr(a); p.region = r; save(); ensureDetail(p); renderAll(); extra = ' (지자체 ' + r + '는 주소로 반영함)'; }
@@ -686,23 +736,27 @@ function runLookup(a, alt) {
     });
 }
 function loadScript(src) { return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = function () { rej(new Error('주소검색 서비스를 불러오지 못했습니다(인터넷 연결 확인)')); }; document.head.appendChild(s); }); }
-function openPostcode() {
+var PC_MODE = 'set';
+function openPostcode(mode) {
+  PC_MODE = mode === 'add' ? 'add' : 'set';
   var ready = window.daum && daum.Postcode ? Promise.resolve() : loadScript('https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js');
   ready.then(function () {
     var ov = document.createElement('div'); ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px';
     var box = document.createElement('div'); box.style.cssText = 'background:#fff;color:#222;width:min(540px,100%);height:min(600px,90vh);border-radius:10px;overflow:hidden;display:flex;flex-direction:column';
     var hd = document.createElement('div'); hd.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #ddd;font-weight:600';
-    hd.innerHTML = '<span>주소 검색 · 대지를 골라 클릭</span>';
+    hd.innerHTML = '<span>' + (PC_MODE === 'add' ? '추가할 대지 검색 · 골라 클릭' : '주소 검색 · 대지를 골라 클릭') + '</span>';
     var x = document.createElement('button'); x.type = 'button'; x.textContent = '닫기'; x.style.cssText = 'background:#f3f3f3;color:#222'; x.onclick = function () { ov.remove(); }; hd.appendChild(x);
     var body = document.createElement('div'); body.style.cssText = 'flex:1;min-height:0';
     box.appendChild(hd); box.appendChild(body); ov.appendChild(box); document.body.appendChild(ov);
     ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
-    new daum.Postcode({ width: '100%', height: '100%', oncomplete: function (d) { ov.remove(); pickAddress(d); } }).embed(body, { q: $('#addrIn').value.trim(), autoClose: false });
+    new daum.Postcode({ width: '100%', height: '100%', oncomplete: function (d) { ov.remove(); pickAddress(d); } }).embed(body, { q: PC_MODE === 'add' ? '' : $('#addrIn').value.trim(), autoClose: false });
   }).catch(function (e) { toast(e.message); });
 }
 function pickAddress(d) {
   var jibun = fullAddr(d.jibunAddress || d.autoJibunAddress || ''), road = fullAddr(d.roadAddress || d.autoRoadAddress || '');
-  var a = jibun || road; $('#addrIn').value = a;
+  var a = jibun || road;
+  if (PC_MODE === 'add' && hasVwKey()) return addParcel(a);
+  $('#addrIn').value = a;
   if (hasVwKey()) return runLookup(a, road && road !== a ? road : '');
   var p = cur().p, r = matchRegion(a); p.address = a; if (r) p.region = r; save(); ensureDetail(p); renderAll();
   $('#addrMsg').innerHTML = esc('반영: 대지 ' + a + (r ? ' · 지자체: ' + r : ' · 지자체 자동매칭 실패(직접 선택)') + ' · 용도지역은 VWorld 키 등록 전이라 자동조회 불가 → 아래에서 선택') + EUM;
@@ -731,7 +785,8 @@ function bindForm() {
   $$('[data-f]').forEach(function (el) { var k = el.dataset.f; if (el.type === 'checkbox') el.checked = !!p[k]; else el.value = p[k] == null ? '' : p[k]; });
   $$('[data-bf]').forEach(function (el) { el.value = p.bf && p.bf[el.dataset.bf] != null ? p.bf[el.dataset.bf] : ''; });
   $('#nbWrap').hidden = !/근린생활/.test(p.use); $('#roomWrap').hidden = p.use !== '숙박시설'; $('#empWrap').hidden = p.use !== '공장';
-  $('#landUses').innerHTML = p.landUses && p.landUses.length ? '<b>토지이용계획</b> ' + p.landUses.map(function (u) { return '<span class="chip">' + esc(u) + '</span>'; }).join(' ') + (p.pnu ? ' <small>PNU ' + esc(p.pnu) + '</small> <a target="_blank" rel="noopener" href="https://www.eum.go.kr/web/ar/lu/luLandDet.jsp?pnu=' + encodeURIComponent(p.pnu) + '&mode=search&isNoScr=script&selGbn=umd">토지이음에서 이 필지 열람 (층수·높이제한 포함)</a>' : '') : '';
+  var pl = p.parcels || [], plH = pl.length > 1 ? '<div class="parcels"><b>대지 ' + pl.length + '필지 (합계 ' + fmt(pl.reduce(function (a, o) { return a + parcelArea(o); }, 0)) + '㎡)</b><ol>' + pl.map(function (o, i) { return '<li>' + esc(o.full || o.addr) + ' — ' + fmt(parcelArea(o)) + '㎡ · ' + esc(parcelZone(o) || '용도지역 미확인') + (o.eum && o.eum.jimok ? ' · ' + esc(o.eum.jimok) : '') + ' <a target="_blank" rel="noopener" href="' + EUM_URL(o.pnu) + '">토지이음</a> <button type="button" class="ghost" data-rmparcel="' + i + '" aria-label="필지 삭제">삭제</button></li>'; }).join('') + '</ol></div>' : '';
+  $('#landUses').innerHTML = plH + (p.landUses && p.landUses.length ? '<b>토지이용계획</b> ' + p.landUses.map(function (u) { return '<span class="chip">' + esc(u) + '</span>'; }).join(' ') + (p.pnu && pl.length < 2 ? ' <small>PNU ' + esc(p.pnu) + '</small> <a target="_blank" rel="noopener" href="https://www.eum.go.kr/web/ar/lu/luLandDet.jsp?pnu=' + encodeURIComponent(p.pnu) + '&mode=search&isNoScr=script&selGbn=umd">토지이음에서 이 필지 열람 (층수·높이제한 포함)</a>' : '') : '');
   renderRegionSel();
 }
 function askControl(q) {
@@ -847,7 +902,10 @@ function renderLive() {
   var prj = cur(), p = prj.p, L = limits(p), nums = numericChecks(prj), app = applicability(p), site = num(p.siteArea), ks = Object.keys(app);
   var cReq = ks.filter(function (k) { return app[k].lvl === 'req'; }).length, cAsk = ks.filter(function (k) { return app[k].lvl === 'ask'; }).length, cNg = nums.filter(function (n) { return n.ok === false; }).length;
   var h = '<h3>실시간 검토</h3><p class="sub">' + esc(p.region || '지자체 미선택') + ' · ' + esc(p.zone) + ' · ' + esc(p.use) + '</p>';
-  h += '<div class="lvmeta"><span>건폐율<b>' + L.bcr + '%</b></span><span>용적률<b>' + L.far + '%</b></span><span>주차<b>' + L.parkUnit + '㎡</b></span></div>';
+  var pk = nums.filter(function (n) { return n.label === '부설주차 대수'; })[0], dk = nums.filter(function (n) { return n.label === '장애인전용 주차구획'; })[0];
+  h += '<div class="lvmeta" style="grid-template-columns:repeat(2,1fr)"><span>건폐율 한도<b>' + L.bcr + '%</b></span><span>용적률 한도<b>' + L.far + '%</b></span>' +
+    '<span>필요 주차<b>' + (pk ? pk.need + '대' : '–') + '</b>' + (pk ? '' : '연면적 입력 시 계산') + '</span>' +
+    '<span>장애인 주차<b>' + (!dk ? '–' : dk.need ? dk.need + '대' + (dk.ok === null && !/미입력/.test(dk.val) ? '' : '') : '의무 없음') + '</b>' + (dk && dk.need && /답하면/.test(dk.note || '') ? '대상이면' : '') + '</span></div>';
   if (site > 0) h += '<p class="sub">최대 건축면적 <b>' + fmt(site * L.bcr / 100) + '㎡</b> · 최대 용적률 연면적 <b>' + fmt(site * L.far / 100) + '㎡</b></p>';
   h += cNg ? '<p class="lvalert">기준 미달 ' + cNg + '건</p>' : '';
   h += nums.length ? '<ul class="lvlist">' + nums.map(function (n) { var c = n.ok === true ? 'good' : n.ok === false ? 'bad' : 'cond'; return '<li class="' + c + '"><div class="lvh"><b>' + esc(n.label) + '</b><span class="pill ' + c + '">' + (n.ok === true ? '적합' : n.ok === false ? '미달' : '값 입력') + '</span></div><div class="lvv">' + esc(n.val) + '<span> / ' + esc(n.lim) + '</span></div>' + (n.note && n.ok !== true ? '<div class="sub">' + esc(n.note) + '</div>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="hint">대지면적·건축면적·연면적·높이를 입력하면 건폐율·용적률·주차·조경·높이 제한이 바로 계산됩니다.</p>';
@@ -902,6 +960,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (el.dataset.f && el.closest('.ask')) { save(); renderAll(); }
   });
   document.addEventListener('click', function (e) {
+    var rp = e.target.closest('[data-rmparcel]'); if (rp) { removeParcel(+rp.dataset.rmparcel); return; }
     var b = e.target.closest('[data-sa]'); if (b) { cur().p.scapeAns[b.dataset.sa] = b.dataset.v; save(); renderAll(); }
   });
   $('#fileList').addEventListener('click', function (e) {
@@ -924,7 +983,7 @@ document.addEventListener('DOMContentLoaded', function () {
     $('#addrMsg').textContent = '조회 중…';
     runLookup(a);
   });
-  (function () { var b = document.createElement('button'); b.type = 'button'; b.id = 'addrSearch'; b.textContent = '주소 검색'; b.title = '주소를 검색해 대지를 고릅니다'; b.addEventListener('click', openPostcode); var ab = $('#addrBtn'); ab.parentNode.insertBefore(b, ab); ab.textContent = '입력 주소로 조회'; ab.className = ''; b.className = 'primary';
+  (function () { var b = document.createElement('button'); b.type = 'button'; b.id = 'addrSearch'; b.textContent = '주소 검색'; b.title = '주소를 검색해 대지를 고릅니다'; b.addEventListener('click', function () { openPostcode('set'); }); var ab = $('#addrBtn'); ab.parentNode.insertBefore(b, ab); var b2 = document.createElement('button'); b2.type = 'button'; b2.id = 'addrAdd'; b2.textContent = '＋ 대지 추가'; b2.title = '여러 필지를 합쳐 하나의 대지로 쓸 때'; b2.addEventListener('click', function () { if (!(cur().p.parcels || []).length) { toast('먼저 첫 번째 대지를 조회하세요'); return; } openPostcode('add'); }); ab.parentNode.insertBefore(b2, ab); ab.textContent = '입력 주소로 조회'; ab.className = ''; b.className = 'primary';
     $('#addrIn').placeholder = '[주소 검색]으로 대지를 고르거나, 지번·도로명 주소를 직접 입력'; })();
   $('#addrIn').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('#addrBtn').click(); });
 
