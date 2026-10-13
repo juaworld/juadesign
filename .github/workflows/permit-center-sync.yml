@@ -1,0 +1,36 @@
+name: permit-center-sync
+# 가상인허가센터: 국가법령·전국 지자체 조례를 매주 자동 동기화
+on:
+  schedule:
+    - cron: '7 21 * * 0'   # 매주 월요일 06:07 (KST)
+  workflow_dispatch:
+permissions:
+  contents: write
+  issues: write
+concurrency:
+  group: permit-center-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 법령·조례 동기화
+        env:
+          LAW_OC: ${{ secrets.LAW_OC }}
+        run: node permit-center/scripts/sync.mjs
+      - name: 변경사항 커밋
+        run: |
+          git config user.name "permit-center-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add permit-center/data
+          if git diff --cached --quiet; then echo "변경 없음"; else git commit -m "가상인허가센터 데이터 자동 동기화 $(date -u +%F)" && git push; fi
+      - name: 개정 감지 이슈 등록
+        if: hashFiles('permit-center/scripts/issue.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue create --title "[가상인허가센터] 법령·조례 변경 감지 $(date -u +%F)" --body-file permit-center/scripts/issue.md
