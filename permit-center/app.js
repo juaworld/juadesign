@@ -34,7 +34,7 @@ var STORE = 'vpc2_state', KEYSTORE = 'vpc2_vwkey';
 var DEFAULT_P = {
   name: '새 프로젝트', address: '', pnu: '', landUses: [], region: '', zone: '계획관리지역', use: '공장', nbSub: '', owner: '민간', work: '신축',
   siteArea: '', bldgArea: '', gfa: '', gfaFar: '', addArea: '', floorsAbove: '', floorsBelow: '0', height: '', eaves: '', span: '', cantilever: false, flatSlab: false,
-  excavation: '0', hvac: '있음', emp50: '', rooms: '', households: '', industrialComplex: false, landscapeDistrict: false, keyLandscapeArea: false,
+  excavation: '0', hvac: '있음', emp50: '', landCat: '', cutFill: '', growthPlan: false, devCmteEx: '', rooms: '', households: '', industrialComplex: false, landscapeDistrict: false, keyLandscapeArea: false,
   districtPlan: false, greenbelt: false, separateAdd: false, mountain: '없음', parkingFloor: false, combustible750: false, trafficZone: '',
   parkingPlan: '', disabledParkingPlan: '', landscapePlan: '', bcrLimit: '', farLimit: '', epi: '', bf: {}, scapeAns: {}
 };
@@ -123,11 +123,12 @@ function evalScapeClause(c, p, ctx) {
 function scapeEval(p, ctx) {
   var det = regionDetail(p), R = regionOf(p);
   var out = { lvl: 'no', why: [], asks: [], clauses: [] };
+  if (ctx && (ctx.kind === '신고' || ctx.kind === '용도변경' || p.work === '대수선')) { out.why.push((ctx.kind === '신고' ? '건축신고 대상' : p.work === '대수선' ? '대수선' : '용도변경') + ' → 건축물 경관심의는 건축허가 대상 건축물만 받음 (경관법 시행령 제21조제1항 "건축허가를 받기 전") → 비대상'); return out; }
   if (p.landscapeDistrict) { out.lvl = 'req'; out.why.push('경관지구 내 건축물 — 경관법 제28조제1항제1호 (조례로 정한 제외 대상이 아니면 심의)'); }
   if (p.keyLandscapeArea) { out.lvl = 'req'; out.why.push('중점경관관리구역 내 건축물 — 경관법 제28조제1항제2호'); }
   if (!R) { if (out.lvl === 'no') { out.lvl = 'ask'; out.asks.push({ field: 'region', label: '지자체를 선택하면 해당 경관조례 조항으로 판정합니다' }); } return out; }
   if (!det) { out.why.push('조례 원문 불러오는 중…'); return out; }
-  if (!det.scape || !det.scape.bldText) { if (out.lvl === 'no') out.why.push('해당 지자체 경관조례에 건축물 심의대상 조항이 없음 → 경관지구·중점경관관리구역·공공건축물(법정)만 대상'); if (p.owner !== '민간' && out.lvl === 'no') { out.lvl = 'req'; out.why.push('공공건축물 — 경관법 제28조제1항제3호'); } return out; }
+  if (!det.scape || !det.scape.bldText) { if (out.lvl === 'no') out.why.push('해당 지자체 경관조례에 건축물 심의대상 조항이 없음 → 경관지구·중점경관관리구역·공공건축물(법정)만 대상'); if (p.owner !== '민간' && out.lvl === 'no') out.why.push('공공건축물도 "조례로 정하는 건축물"만 대상 (경관법 제28조제1항제3호) → 조례 조항 미확인으로 비대상 처리, 관리자 화면에서 조례 확인 권장'); return out; }
   var cl = splitClauses(det.scape.bldText);
   cl.forEach(function (c) {
     if (/제외|생략|아니할 수|하지 않을 수|적용하지/.test(c.intro + (c.intro ? '' : c.text.slice(0, 60)))) return;
@@ -226,7 +227,7 @@ function applicability(p) {
   r.bf = { lvl: lvl, why: why, asks: lvl === 'ask' ? [{ field: 'emp50', label: '공장 운영 사업주의 상시근로자 50명 이상 여부', options: ['', '예', '아니오'] }] : [] };
 
   /* 경관 */
-  var se = scapeEval(p, { multiuse: multiuse });
+  var se = scapeEval(p, { multiuse: multiuse, kind: kind });
   r.scape = { lvl: se.lvl, why: se.why, asks: se.asks, clauses: se.clauses };
 
   /* 건축위원회 */
@@ -275,16 +276,58 @@ function applicability(p) {
   else why.push('굴착깊이 10m 미만 → 대상 아님 (집수정·EV피트·정화조 굴착은 제외하고 산정)');
   r.under = { lvl: lvl, why: why };
 
-  /* 개발행위·환경 */
+  /* 개발행위허가·도시계획위원회 */
+  why = []; asks = []; lvl = 'no';
+  var bldAct = ['신축', '증축', '개축', '재축', '이전'].indexOf(p.work) >= 0;
+  var READY = ['대', '공장용지', '창고용지', '주차장', '주유소용지', '학교용지', '종교용지'];
+  var cat = p.landCat || '', cf = p.cutFill === '' || p.cutFill == null ? null : num(p.cutFill), form = null, cw = [], cmte = 'no';
+  var cityZone = /주거|상업|공업/.test(p.zone);
+  if (!cat) asks.push({ field: 'landCat', label: '현재 지목을 선택하세요 (토지이용계획확인서·토지대장) — 대·공장용지 등은 조성 완료 대지, 전·답·임야·잡종지 등은 형질변경', options: ['', '대', '공장용지', '창고용지', '잡종지', '전', '답', '과수원', '임야', '목장용지', '기타'] });
+  if (cat && cf == null) asks.push({ field: 'cutFill', label: '대지 정지 시 최대 절토·성토 높이(m) — 지하구조물 터파기·되메우기는 제외 (0.5m 이하면 경미한 형질변경)' });
+  if (cat && READY.indexOf(cat) < 0) {
+    if (cityZone && cf != null && cf <= 0.5) { form = false; why.push('지목 ' + cat + '이지만 ' + p.zone + '에서 절·성토 ' + cf + 'm ≤ 0.5m → 지목변경 수반해도 경미한 형질변경 (시행령 제53조제3호가목)'); }
+    else if (cf != null || !cityZone) { form = true; why.push('지목 ' + cat + ' → 대지 조성(지목변경) 수반 → 토지 형질변경 (시행령 제51조제1항제3호)'); }
+  } else if (cat && cf != null) {
+    if (cf > 0.5) { form = true; why.push('조성 완료 대지(' + cat + ')라도 절·성토 ' + cf + 'm > 0.5m → 토지 형질변경 (제53조제3호다목은 절토·성토 제외)'); }
+    else { form = false; why.push('조성 완료 대지(' + cat + ')·절·성토 ' + cf + 'm ≤ 0.5m → 형질변경은 경미한 행위 (제53조제3호가·다목)'); }
+  }
+  if (bldAct) { lvl = 'req'; why.unshift('건축허가·신고 대상 건축물의 ' + p.work + ' = 개발행위(건축물의 건축) → 개발행위허가 대상, 건축허가 시 의제 처리 (국토계획법 제56조제1항제1호, 시행령 제51조·제53조제1호, 건축법 제11조제5항제3호)'); }
+  else if (form === true) { lvl = 'req'; why.unshift(p.work + '는 건축물의 건축이 아니지만 형질변경 수반 → 개발행위허가 대상'); }
+  else if (form === false) why.unshift(p.work + '는 건축물의 건축이 아니고 형질변경도 경미 → 개발행위허가 비대상');
+  else lvl = 'ask';
+  if (p.industrialComplex && form !== true) why.push('산업단지·농공단지 분양필지: 단지 조성 때 형질변경 완료 → 건축 행위만 의제(개발행위 부서 협의 간소)');
+  var ZL = /보전녹지|자연환경보전/.test(p.zone) ? 5000 : /공업|관리|농림/.test(p.zone) ? 30000 : 10000;
+  if (form === true && site > 0) {
+    if (site >= ZL) { cmte = 'req'; why.push('형질변경 면적(필지 총면적 기준) ' + fmt(site, 0) + '㎡ ≥ ' + p.zone + ' 허가규모 ' + fmt(ZL, 0) + '㎡ → 원칙적으로 허가 불가 (법 제58조제1항제1호, 시행령 제55조) — 지구단위계획 가구·획지 안 기반시설 기설치(제55조제3항제1호) 등 예외가 아니면 지구단위계획 수립 필요. 관리·농림지역은 조례로 더 작게 정할 수 있음'); cw.push('규모 이상 형질변경 → 심의 대상 (시행령 제57조제1항제1호)'); }
+    else if (NON_URBAN.indexOf(p.zone) >= 0 || /녹지/.test(p.zone)) { cmte = 'cond'; cw.push(p.zone + '에서 건축 목적 형질변경(허가규모 미만) → 심의 대상이 원칙 (시행령 제57조제1항제1호의2)'); }
+    else cw.push(p.zone + ' 허가규모 미만 → 심의 비대상 (법 제59조제2항제3호, 조례로 정한 규모·위치에 해당할 때만 심의)');
+  } else if (form === true) asks.push({ field: 'siteArea', label: '대지면적(형질변경 면적)을 입력하세요 — 허가규모·도시계획위원회 심의 판정에 필요' });
+  else if (form === false) cw.push('형질변경 없음 → 심의 비대상 (시행령 제57조제1항은 형질변경을 수반하는 경우만)');
+  var cx = [];
+  if (p.districtPlan) cx.push('지구단위계획구역'); if (p.growthPlan) cx.push('성장관리계획구역');
+  if (r.traffic && r.traffic.lvl === 'req') cx.push('교통영향평가 검토 대상(제59조제2항제5호)');
+  if (cmte !== 'no' && cx.length) { cmte = 'no'; cw.push(cx.join('·') + ' → 심의 면제 (법 제59조제2항)'); }
+  if (cmte === 'cond') {
+    if (p.devCmteEx === '예') { cmte = 'no'; cw.push('제57조제1항제1호의2 단서 예외 해당(입력값) → 심의 면제'); }
+    else if (p.devCmteEx === '아니오') { cmte = 'req'; cw.push('단서 예외 해당 없음(입력값) → 심의 대상 확정'); }
+    else { cmte = 'req'; cw.push('단서 예외가 아니면 심의 대상 → 아래 질문에 답하면 확정'); asks.push({ field: 'devCmteEx', label: '대지가 자연취락지구·개발진흥지구·기반시설부담구역·준산업단지·공장입지유도지구이거나, 지자체가 기반시설 설치지역으로 고시한 곳이거나, 조례로 정한 예외 건축물(기존 부지 10% 이하 증축, 660㎡ 이하 농·임·어업용 창고 등) 또는 계획관리지역 2002년 이전 공장의 50% 이내 부지확장입니까?', options: ['', '예', '아니오'] }); }
+  }
+  cw.forEach(function (w) { why.push('[도시계획위원회] ' + w); });
+  if (/^(전|답|과수원)$/.test(cat)) why.push('농지 → 농지전용허가·신고 선행 (농지법 제34조·제35조), 농지보전부담금 부과');
+  if (cat === '임야' || p.mountain !== '없음') why.push('산지 → 산지전용허가 별도 (산지관리법 제14조), 대체산림자원조성비 부과');
+  if (form === true) why.push('허가기준: 도시·군계획조례의 경사도·표고·입목축적, 진입도로 폭, 배수 / 이행보증금 예치 (법 제58조·제60조)');
+  r.dev = { lvl: lvl, why: why, asks: asks, form: form, cmte: cmte, label: lvl === 'req' ? (cmte === 'req' ? '도시계획위원회 심의 포함' : form === true ? '형질변경 포함' : '건축허가 시 의제') : '' };
+
+  /* 소규모환경영향평가 */
   why = []; lvl = 'no'; var eia = false;
   var eiaTh = { '보전관리지역': 5000, '생산관리지역': 7500, '계획관리지역': 10000, '농림지역': 7500, '자연환경보전지역': 5000 }[p.zone];
-  if (NON_URBAN.indexOf(p.zone) >= 0 || /녹지/.test(p.zone)) { lvl = 'req'; why.push('비도시·녹지지역 토지 형질변경 수반 → 개발행위허가 (건축허가 시 의제, 국토계획법 제56조)'); }
   if (eiaTh && site >= eiaTh) { eia = true; lvl = 'req'; why.push(p.zone + ' 사업계획면적 ' + fmt(site, 0) + '㎡ ≥ ' + fmt(eiaTh, 0) + '㎡ → 소규모환경영향평가 (시행령 별표4)'); }
+  else if (eiaTh && site > 0) why.push(p.zone + ' 사업계획면적 ' + fmt(site, 0) + '㎡ < ' + fmt(eiaTh, 0) + '㎡ → 비대상');
+  else if (!eiaTh) why.push(p.zone + ' — 별표4 용도지역 기준(관리·농림·자연환경보전) 대상 아님');
   if (p.greenbelt && site >= 5000) { eia = true; lvl = 'req'; why.push('개발제한구역 5천㎡ 이상 → 소규모환경영향평가'); }
   if (p.mountain === '공익용산지' && site >= 10000) { eia = true; lvl = 'req'; why.push('공익용산지 1만㎡ 이상 → 소규모환경영향평가'); }
   if (p.mountain === '그 외 산지' && site >= 30000) { eia = true; lvl = 'req'; why.push('산지(공익용 외) 3만㎡ 이상 → 소규모환경영향평가'); }
   if (p.mountain !== '없음') why.push('산지 포함 → 산지전용허가 별도');
-  if (lvl === 'no') why.push('도시지역(녹지 제외) 일반 대지 → 개발행위·소규모환경 대상 아님');
   r.env = { lvl: lvl, why: why, eia: eia };
 
   /* 공장설립 */
@@ -304,7 +347,10 @@ function docRequired(p, app, rid, d) {
   if (rid === 'energy' && d.id === 'renew') return areaBasis(p) >= 1000 && ['신축', '재축', '개축'].indexOf(p.work) >= 0;
   if (rid === 'energy' && d.id === 'primary') return ['업무시설', '교육연구시설'].indexOf(p.use) >= 0 && num(p.gfa) >= 3000;
   if (rid === 'env' && d.id === 'eia') return app.env.eia;
-  if (rid === 'env' && d.id === 'dev') return NON_URBAN.indexOf(p.zone) >= 0 || /녹지/.test(p.zone);
+  if (rid === 'dev' && d.id === 'cmte') return app.dev.cmte === 'req';
+  if (rid === 'dev' && ['survey', 'earth', 'drain', 'slope'].indexOf(d.id) >= 0) return app.dev.form === true;
+  if (rid === 'dev' && d.id === 'farm') return /^(전|답|과수원)$/.test(p.landCat);
+  if (rid === 'dev' && d.id === 'forest') return p.landCat === '임야' || p.mountain !== '없음';
   if (rid === 'factory' && d.id === 'app') return p.use === '공장' && !p.industrialComplex && num(p.bldgArea) >= 500;
   if (rid === 'cmte' && d.id === 'struct') return app.cmte.lvl === 'req';
   return d.req;
