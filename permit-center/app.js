@@ -485,34 +485,33 @@ function vw(path, params) {
   var url = VW + path + '?' + q;
   return fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).catch(function () { return jsonp(url); });
 }
+function feats(j) { return j && j.response && j.response.result && j.response.result.featureCollection ? j.response.result.featureCollection.features || [] : []; }
+function polyArea(g) { // 경위도(EPSG:4326) 다각형 → 국지 평면 근사 면적(㎡)
+  if (!g) return 0; var polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+  var lat0 = polys.length ? polys[0][0][0][1] * Math.PI / 180 : 0, kx = 111320 * Math.cos(lat0), ky = 110574;
+  var ring = function (r) { var a = 0; for (var k = 0; k < r.length - 1; k++) a += (r[k][0] * kx) * (r[k + 1][1] * ky) - (r[k + 1][0] * kx) * (r[k][1] * ky); return Math.abs(a) / 2; };
+  return polys.reduce(function (s, pl) { return s + ring(pl[0]) - pl.slice(1).reduce(function (h, r) { return h + ring(r); }, 0); }, 0);
+}
+var VW_LAYERS = [['LT_C_UQ111', 'zone'], ['LT_C_UQ112', 'zone'], ['LT_C_UQ113', 'zone'], ['LT_C_UQ114', 'zone'], ['LT_C_UQ121', '경관지구'], ['LT_C_UPISUQ161', '지구단위계획구역'], ['LT_C_UD801', '개발제한구역']];
 function lookupAddress(addr) {
-  var out = { addr: addr };
-  return vw('/req/search', { service: 'search', request: 'search', version: '2.0', crs: 'EPSG:4326', size: 5, page: 1, query: addr, type: 'address', category: 'parcel', errorformat: 'json' })
-    .then(function (j) {
-      var it = j && j.response && j.response.result && j.response.result.items ? j.response.result.items[0] : null;
-      if (it) { out.pnu = it.id; out.full = it.address && (it.address.parcel || it.address.road); out.pt = it.point; return; }
-      return vw('/req/search', { service: 'search', request: 'search', version: '2.0', crs: 'EPSG:4326', size: 5, page: 1, query: addr, type: 'address', category: 'road', errorformat: 'json' }).then(function (j2) {
-        var it2 = j2 && j2.response && j2.response.result && j2.response.result.items ? j2.response.result.items[0] : null;
-        if (!it2) throw new Error('주소를 찾지 못했습니다');
-        out.full = it2.address && (it2.address.parcel || it2.address.road); out.pt = it2.point;
-        return vw('/req/data', { service: 'data', request: 'GetFeature', data: 'LP_PA_CBND_BUBUN', geomFilter: 'POINT(' + it2.point.x + ' ' + it2.point.y + ')', crs: 'EPSG:4326', size: 1, page: 1, errorformat: 'json' }).then(function (j3) {
-          var f = j3 && j3.response && j3.response.result && j3.response.result.featureCollection ? j3.response.result.featureCollection.features[0] : null;
-          if (!f) throw new Error('필지(PNU)를 찾지 못했습니다'); out.pnu = f.properties.pnu; out.parcel = f.properties.addr;
-        });
+  var out = { addr: addr, uses: [] };
+  var search = function (cat) { return vw('/req/search', { service: 'search', request: 'search', version: '2.0', crs: 'EPSG:4326', size: 5, page: 1, query: addr, type: 'address', category: cat, errorformat: 'json' }); };
+  var item = function (j) { if (j && j.response && j.response.status === 'ERROR') throw new Error('VWorld: ' + (j.response.error ? j.response.error.text : '오류')); return j && j.response && j.response.result && j.response.result.items ? j.response.result.items[0] : null; };
+  return search('parcel').then(function (j) { var it = item(j); if (it) return it; return search('road').then(item); })
+    .then(function (it) {
+      if (!it) throw new Error('주소를 찾지 못했습니다');
+      out.full = it.address && (it.address.parcel || it.address.road); out.pt = it.point;
+      var pt = 'POINT(' + it.point.x + ' ' + it.point.y + ')';
+      var parcel = vw('/req/data', { service: 'data', request: 'GetFeature', data: 'LP_PA_CBND_BUBUN', geomFilter: pt, crs: 'EPSG:4326', size: 1, page: 1, errorformat: 'json' }).then(function (j) {
+        var f = feats(j)[0]; if (f) { out.pnu = f.properties.pnu; out.parcel = f.properties.addr; out.area = Math.round(polyArea(f.geometry) * 10) / 10; }
+      }).catch(function () {});
+      var layers = VW_LAYERS.map(function (L) {
+        return vw('/req/data', { service: 'data', request: 'GetFeature', data: L[0], geomFilter: pt, geometry: 'false', size: 10, page: 1, errorformat: 'json' }).then(function (j) {
+          feats(j).forEach(function (f) { var nm = f.properties.uname || f.properties.dgm_nm || L[1]; out.uses.push({ name: L[1] === 'zone' ? nm : L[1] + (nm && nm !== L[1] ? ' (' + nm + ')' : ''), rel: '포함' }); if (L[1] === 'zone') out.zone1 = nm; });
+        }).catch(function () {});
       });
-    })
-    .then(function () { return vw('/ned/data/getLandUseAttr', { pnu: out.pnu, numOfRows: 100, pageNo: 1 }); })
-    .then(function (j) {
-      var fields = j && j.landUses && j.landUses.field ? [].concat(j.landUses.field) : [];
-      out.uses = fields.map(function (f) { return { name: f.prposAreaDstrcCodeNm, rel: f.cnflcAtNm }; });
-      return vw('/ned/data/getLandCharacteristics', { pnu: out.pnu, numOfRows: 10, pageNo: 1 }).catch(function () { return null; });
-    })
-    .then(function (j) {
-      var fs = j && j.landCharacteristicss && j.landCharacteristicss.field ? [].concat(j.landCharacteristicss.field) : [];
-      fs.sort(function (a, b) { return (b.stdrYear || 0) - (a.stdrYear || 0); });
-      if (fs[0]) { out.area = fs[0].lndpclAr; out.zone1 = fs[0].prposArea1Nm; out.jimok = fs[0].lndcgrCodeNm; out.road = fs[0].roadSideCodeNm; }
-      return out;
-    });
+      return Promise.all([parcel].concat(layers));
+    }).then(function () { return out; });
 }
 function applyLookup(o) {
   var p = cur().p, names = (o.uses || []).map(function (u) { return nospace(u.name); }), notes = [];
@@ -520,12 +519,10 @@ function applyLookup(o) {
   var z = Object.keys(ZONES).filter(function (k) { return names.indexOf(k) >= 0; })[0] || Object.keys(ZONES).filter(function (k) { return nospace(o.zone1) === k; })[0];
   if (z) { p.zone = z; notes.push('용도지역: ' + z); }
   p.landscapeDistrict = names.some(function (n) { return /경관지구/.test(n); });
-  p.keyLandscapeArea = names.some(function (n) { return /중점경관관리구역/.test(n); });
   p.districtPlan = names.some(function (n) { return /지구단위계획구역/.test(n); });
-  p.industrialComplex = names.some(function (n) { return /산업단지|농공단지/.test(n); });
   p.greenbelt = names.some(function (n) { return /개발제한구역/.test(n); });
-  if (names.some(function (n) { return /공익용산지/.test(n); })) p.mountain = '공익용산지'; else if (names.some(function (n) { return /임업용산지|준보전산지|보전산지/.test(n); })) p.mountain = '그 외 산지';
-  if (o.area && !p.siteArea) { p.siteArea = String(o.area); notes.push('대지면적(공부): ' + fmt(num(o.area)) + '㎡'); }
+  notes.push('중점경관관리구역·산업단지·산지 여부는 VWorld에서 제공하지 않아 직접 체크');
+  if (o.area && !p.siteArea) { p.siteArea = String(o.area); notes.push('대지면적(지적도 도형 계산, 공부면적과 소폭 차이 가능): ' + fmt(num(o.area)) + '㎡'); }
   var a = nospace(p.address).replace(/^강원도/, '강원특별자치도').replace(/^전라북도/, '전북특별자치도').replace(/^(전라남도|광주광역시)/, '전남광주통합특별시');
   if (D.regions) {
     var best = '', keys = Object.keys(D.regions.regions);
