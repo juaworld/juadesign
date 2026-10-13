@@ -34,7 +34,7 @@ var STORE = 'vpc2_state', KEYSTORE = 'vpc2_vwkey';
 var DEFAULT_P = {
   name: '새 프로젝트', address: '', pnu: '', landUses: [], region: '', zone: '계획관리지역', use: '공장', nbSub: '', owner: '민간', work: '신축',
   siteArea: '', bldgArea: '', gfa: '', gfaFar: '', addArea: '', floorsAbove: '', floorsBelow: '0', height: '', eaves: '', span: '', cantilever: false, flatSlab: false,
-  excavation: '0', hvac: '있음', emp50: '', landCat: '', cutFill: '', growthPlan: false, devCmteEx: '', stWall: '', stChimney: '', stTower: '', stTank: '', stPv: '', stMast: '', stShelter: '', stPark: false, stSilo: false, rooms: '', households: '', industrialComplex: false, landscapeDistrict: false, keyLandscapeArea: false,
+  excavation: '0', hvac: '있음', emp50: '', landCat: '', cutFill: '', growthPlan: false, devCmteEx: '', stWall: '', stChimney: '', stTower: '', stTank: '', stPv: '', stMast: '', stShelter: '', stPark: false, stSilo: false, heightDistrict: false, heritageZone: false, flightZone: false, hLimit: '', hLimitSrc: '', northDist: '', rooms: '', households: '', industrialComplex: false, landscapeDistrict: false, keyLandscapeArea: false,
   districtPlan: false, greenbelt: false, separateAdd: false, mountain: '없음', parkingFloor: false, combustible750: false, trafficZone: '',
   parkingPlan: '', disabledParkingPlan: '', landscapePlan: '', bcrLimit: '', farLimit: '', epi: '', bf: {}, scapeAns: {}
 };
@@ -420,6 +420,11 @@ function numericChecks(prj) {
     else if (ln.need) out.push({ rid: 'permit', label: '조경면적', val: p.landscapePlan !== '' ? fmt(num(p.landscapePlan)) + '㎡ (' + fmt(num(p.landscapePlan) / site * 100, 1) + '%)' : '미입력', lim: fmt(ln.need) + '㎡ 이상 — ' + ln.note, ok: p.landscapePlan !== '' ? num(p.landscapePlan) >= ln.need : null });
     else out.push({ rid: 'permit', label: '조경면적', val: p.landscapePlan || '-', lim: ln.note, ok: null });
   }
+  var H = num(p.height), hFlags = [];
+  if (p.heightDistrict) hFlags.push('고도지구'); if (p.districtPlan) hFlags.push('지구단위계획'); if (p.landscapeDistrict) hFlags.push('경관지구'); if (p.heritageZone) hFlags.push('국가유산 주변'); if (p.flightZone) hFlags.push('비행안전구역·공항');
+  if (num(p.hLimit) > 0) out.push({ rid: 'permit', label: '최고높이', val: H ? fmt(H) + 'm' : '미입력', lim: fmt(num(p.hLimit)) + 'm 이하 (' + (p.hLimitSrc || '직접 입력') + ')', ok: H ? H <= num(p.hLimit) : null, note: H && H <= num(p.hLimit) && num(p.hLimit) - H < 1 ? '여유 1m 미만 — 옥탑·파라펫·설비 높이 포함 여부 재확인' : '' });
+  else if (hFlags.length) out.push({ rid: 'permit', label: '최고높이', val: H ? fmt(H) + 'm' : '미입력', lim: hFlags.join('·') + ' 높이 기준 입력 필요', ok: null, note: '고도지구·지구단위계획: 토지이음 도시계획 결정도 / 국가유산: 국가유산청 현상변경 허용기준 / 비행안전구역: 관할 부대 협의 / 공항: 장애물제한표면' });
+  if (/전용주거|일반주거/.test(p.zone) && H > 0) { var nNeed = H <= 10 ? 1.5 : H / 2, nHas = p.northDist !== '' && p.northDist != null; out.push({ rid: 'permit', label: '정북방향 일조 이격', val: nHas ? fmt(num(p.northDist)) + 'm' : '미입력', lim: fmt(nNeed, 2) + 'm 이상 (높이 ' + fmt(H) + 'm: 10m 이하 부분 1.5m, 초과 부분은 높이의 1/2 — 건축법 시행령 제86조)', ok: nHas ? num(p.northDist) >= nNeed : null, note: '최고 높이 부분 기준. 정북 방향이 도로·공원·하천 등에 접하면 완화 (제86조제3항)' }); }
   if (app.energy.lvl === 'req') {
     var auto = prj.files.map(function (f) { return f.epi; }).filter(Boolean);
     var val = num(p.epi) || (auto.length ? Math.max.apply(null, auto) : 0), lim = p.owner !== '민간' && ['신축', '재축', '개축', '증축'].indexOf(p.work) >= 0 ? 74 : 65;
@@ -574,7 +579,7 @@ function polyArea(g) { // 경위도(EPSG:4326) 다각형 → 국지 평면 근�
   var ring = function (r) { var a = 0; for (var k = 0; k < r.length - 1; k++) a += (r[k][0] * kx) * (r[k + 1][1] * ky) - (r[k + 1][0] * kx) * (r[k][1] * ky); return Math.abs(a) / 2; };
   return polys.reduce(function (s, pl) { return s + ring(pl[0]) - pl.slice(1).reduce(function (h, r) { return h + ring(r); }, 0); }, 0);
 }
-var VW_LAYERS = [['LT_C_UQ111', 'zone'], ['LT_C_UQ112', 'zone'], ['LT_C_UQ113', 'zone'], ['LT_C_UQ114', 'zone'], ['LT_C_UQ121', '경관지구'], ['LT_C_UPISUQ161', '지구단위계획구역'], ['LT_C_UD801', '개발제한구역'], ['LT_C_DAMDAN', '산업단지']];
+var VW_LAYERS = [['LT_C_UQ111', 'zone'], ['LT_C_UQ112', 'zone'], ['LT_C_UQ113', 'zone'], ['LT_C_UQ114', 'zone'], ['LT_C_UQ121', '경관지구'], ['LT_C_UPISUQ161', '지구단위계획구역'], ['LT_C_UD801', '개발제한구역'], ['LT_C_DAMDAN', '산업단지'], ['LT_C_UQ122', '*'], ['LT_C_UQ123', '*'], ['LT_C_UQ124', '*'], ['LT_C_UQ125', '*'], ['LT_C_UQ126', '*'], ['LT_C_UQ127', '*'], ['LT_C_UQ128', '*'], ['LT_C_UQ129', '*']];
 function lookupAddress(addr) {
   var out = { addr: addr, uses: [], errs: [] };
   var vwErr = function (j) { return j && j.response && j.response.status === 'ERROR' ? ((j.response.error && (j.response.error.code + ' ' + (j.response.error.text || ''))) || '오류') : ''; };
@@ -591,7 +596,7 @@ function lookupAddress(addr) {
       var layers = VW_LAYERS.map(function (L) {
         return vw('/req/data', { service: 'data', request: 'GetFeature', data: L[0], geomFilter: pt, crs: 'EPSG:4326', geometry: 'false', size: 10, page: 1, errorformat: 'json' }).then(function (j) {
           var e = vwErr(j); if (e) { out.errs.push(L[0] + ': ' + e); return; }
-          feats(j).forEach(function (f) { var pr = f.properties || {}; if (L[1] === 'zone' && !pr.uname) return; var nm = pr.uname || pr.dgm_nm || pr.dan_name || Object.keys(pr).map(function (k) { return pr[k]; }).filter(function (v) { return typeof v === 'string' && /단지$/.test(v); })[0] || L[1]; out.uses.push({ name: L[1] === 'zone' ? nm : L[1] + (nm && nm !== L[1] ? ' (' + nm + ')' : ''), rel: '포함' }); if (L[1] === 'zone') out.zone1 = nm; });
+          feats(j).forEach(function (f) { var pr = f.properties || {}; if (L[1] === 'zone' && !pr.uname) return; if (L[1] === '*') { var own = pr.uname || pr.dgm_nm || Object.keys(pr).map(function (k) { return pr[k]; }).filter(function (v) { return typeof v === 'string' && /(지구|구역)$/.test(v); })[0]; if (own && !out.uses.some(function (u) { return u.name === own; })) out.uses.push({ name: own, rel: '포함' }); return; } var nm = pr.uname || pr.dgm_nm || pr.dan_name || Object.keys(pr).map(function (k) { return pr[k]; }).filter(function (v) { return typeof v === 'string' && /단지$/.test(v); })[0] || L[1]; out.uses.push({ name: L[1] === 'zone' ? nm : L[1] + (nm && nm !== L[1] ? ' (' + nm + ')' : ''), rel: '포함' }); if (L[1] === 'zone') out.zone1 = nm; });
         }).catch(function (e) { out.errs.push(L[0] + ': ' + e.message); });
       });
       return Promise.all([parcel].concat(layers));
@@ -610,6 +615,12 @@ function applyLookup(o) {
   if (o.jimok) { p.landCat = JM[o.jimok] || '기타'; notes.push('지목: ' + p.landCat); }
   if (p.districtPlan) notes.push('지구단위계획구역 포함 → 건폐율·용적률·용도는 해당 지구단위계획 결정도서가 우선');
   if (p.industrialComplex) notes.push('산업단지 내 필지');
+  p.heightDistrict = names.some(function (n) { return /고도지구/.test(n); });
+  if (p.heightDistrict) notes.push('고도지구 → 높이 제한 칸에 결정 높이 입력');
+  if (names.some(function (n) { return /국가유산|문화재|역사문화환경/.test(n); })) p.heritageZone = true;
+  if (names.some(function (n) { return /비행안전|비행장|공항/.test(n); })) p.flightZone = true;
+  var exz = names.filter(function (n) { return /자연취락지구|개발진흥지구|기반시설부담구역|준산업단지|공장입지유도지구/.test(n); });
+  if (exz.length) { p.devCmteEx = '예'; notes.push(exz[0] + ' → 개발행위 도시계획위원회 심의 예외 해당'); }
   if (o.area && !p.siteArea) { p.siteArea = String(o.area); notes.push('대지면적(지적도 도형 계산, 공부면적과 소폭 차이 가능): ' + fmt(num(o.area)) + '㎡'); }
   var best = matchRegion(p.address); if (best) { p.region = best; notes.push('지자체: ' + best); }
   if (o.full) notes.unshift('대지: ' + o.full);
@@ -793,8 +804,20 @@ function renderMeta() {
   box.innerHTML = h;
 }
 function renderProjectSel() { $('#prjSel').innerHTML = state.projects.map(function (x) { return opt(x.id, state.cur, x.p.name); }).join(''); }
-function renderAll() { renderProjectSel(); bindForm(); renderApp(); renderFiles(); renderNums(); renderReport(); renderLocal(); renderMeta(); }
-function softRender() { renderRegionSel(); renderApp(); renderChecklist(); renderNums(); renderReport(); }
+function renderAll() { renderProjectSel(); bindForm(); renderApp(); renderFiles(); renderNums(); renderReport(); renderLocal(); renderMeta(); renderLive(); }
+function softRender() { renderRegionSel(); renderApp(); renderChecklist(); renderNums(); renderReport(); renderLive(); }
+function renderLive() {
+  var box = document.getElementById('liveNums'); if (!box) return;
+  var prj = cur(), p = prj.p, L = limits(p), nums = numericChecks(prj), app = applicability(p), site = num(p.siteArea), ks = Object.keys(app);
+  var cReq = ks.filter(function (k) { return app[k].lvl === 'req'; }).length, cAsk = ks.filter(function (k) { return app[k].lvl === 'ask'; }).length, cNg = nums.filter(function (n) { return n.ok === false; }).length;
+  var h = '<h3>실시간 검토</h3><p class="sub">' + esc(p.region || '지자체 미선택') + ' · ' + esc(p.zone) + ' · ' + esc(p.use) + '</p>';
+  h += '<div class="lvmeta"><span>건폐율<b>' + L.bcr + '%</b></span><span>용적률<b>' + L.far + '%</b></span><span>주차<b>' + L.parkUnit + '㎡</b></span></div>';
+  if (site > 0) h += '<p class="sub">최대 건축면적 <b>' + fmt(site * L.bcr / 100) + '㎡</b> · 최대 용적률 연면적 <b>' + fmt(site * L.far / 100) + '㎡</b></p>';
+  h += cNg ? '<p class="lvalert">기준 미달 ' + cNg + '건</p>' : '';
+  h += nums.length ? '<ul class="lvlist">' + nums.map(function (n) { var c = n.ok === true ? 'good' : n.ok === false ? 'bad' : 'cond'; return '<li class="' + c + '"><div class="lvh"><b>' + esc(n.label) + '</b><span class="pill ' + c + '">' + (n.ok === true ? '적합' : n.ok === false ? '미달' : '값 입력') + '</span></div><div class="lvv">' + esc(n.val) + '<span> / ' + esc(n.lim) + '</span></div>' + (n.note && n.ok !== true ? '<div class="sub">' + esc(n.note) + '</div>' : '') + '</li>'; }).join('') + '</ul>' : '<p class="hint">대지면적·건축면적·연면적·높이를 입력하면 건폐율·용적률·주차·조경·높이 제한이 바로 계산됩니다.</p>';
+  h += '<p class="lvsum">대상 <b>' + cReq + '</b> · 답변 필요 <b>' + cAsk + '</b> · <a href="#" onclick="document.querySelector(\'.tabs [data-tab=app]\').click();return false">대상 판정 보기</a></p>';
+  box.innerHTML = h;
+}
 
 function claudePrompt() {
   var prj = cur(), p = prj.p, evl = evaluate(prj), L = limits(p);
@@ -894,5 +917,6 @@ document.addEventListener('DOMContentLoaded', function () {
     ensureDetail(cur().p); renderAll();
   });
 });
-window.VPC = { renderAll: renderAll, toast: toast, cur: cur, save: save, regionRaw: function (k) { return D.regions ? D.regions.regions[k] : null; }, applicability: applicability, numericChecks: numericChecks, evaluate: evaluate, state: function () { return state; }, D: D, splitClauses: splitClauses, evalScapeClause: evalScapeClause, landscapeNeed: landscapeNeed, limits: limits, applyLookup: applyLookup };
+function vwProbe(layer, x, y) { return vw('/req/data', { service: 'data', request: 'GetFeature', data: layer, geomFilter: 'POINT(' + x + ' ' + y + ')', crs: 'EPSG:4326', geometry: 'false', size: 5, page: 1, errorformat: 'json' }).then(function (j) { var r = j && j.response || {}; return { layer: layer, status: r.status, err: r.error ? r.error.code + ' ' + (r.error.text || '') : '', n: feats(j).length, props: feats(j).map(function (f) { return f.properties; }) }; }, function (e) { return { layer: layer, fail: e.message }; }); }
+window.VPC = { vwProbe: vwProbe, renderAll: renderAll, toast: toast, cur: cur, save: save, regionRaw: function (k) { return D.regions ? D.regions.regions[k] : null; }, applicability: applicability, numericChecks: numericChecks, evaluate: evaluate, state: function () { return state; }, D: D, splitClauses: splitClauses, evalScapeClause: evalScapeClause, landscapeNeed: landscapeNeed, limits: limits, applyLookup: applyLookup };
 })();

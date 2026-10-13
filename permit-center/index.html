@@ -99,6 +99,15 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;opacity:0;pointer-events:none;transition:.2s;max-width:calc(100% - 32px)}
 #toast.on{opacity:1;transform:translateX(-50%)}
 @media (max-width:640px){#checklist,#appList{grid-template-columns:1fr}.content ul,.two{grid-template-columns:1fr}.hero{flex-direction:column;align-items:flex-start}}
+.infoWrap{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;align-items:start}
+.live{position:sticky;top:118px;max-height:calc(100vh - 130px);overflow:auto;margin:0;padding:14px 14px 10px}
+.live h3{margin:0 0 2px}.lvmeta{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0}
+.lvmeta span{background:var(--surface2);border-radius:8px;padding:6px 8px;font-size:12px;color:var(--ink2);display:flex;flex-direction:column}.lvmeta b{font-size:16px;color:var(--ink)}
+.lvlist{list-style:none;margin:8px 0;padding:0;display:grid;gap:6px}.lvlist li{border:1px solid var(--line);border-left:4px solid var(--cond);border-radius:8px;padding:7px 9px}
+.lvlist li.good{border-left-color:var(--good)}.lvlist li.bad{border-left-color:var(--bad);background:var(--bad-bg)}
+.lvh{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:13.5px}.lvv{font-size:13px;margin-top:2px}.lvv span{color:var(--ink2);font-size:12px}
+.lvalert{margin:6px 0;font-weight:700;color:var(--bad)}.lvsum{font-size:12.5px;color:var(--ink2);margin:6px 0 0}
+@media(max-width:900px){.infoWrap{grid-template-columns:1fr}.live{top:auto;bottom:0;max-height:42vh;box-shadow:0 -4px 14px rgba(0,0,0,.12);z-index:4}}
 @media print{header.top,.actions,#toast{display:none!important}body{background:#fff;color:#000}.panel{display:none!important}.panel[data-tab="report"]{display:block!important}.card{break-inside:avoid}}
 </style>
 </head>
@@ -122,7 +131,8 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 <main class="wrap">
 <section class="panel" data-tab="info">
   <h2>프로젝트 정보</h2>
-  <p class="lead">주소를 조회하면 용도지역·지역지구·대지면적·지자체가 자동으로 들어가고, 지자체 조례 기준이 한꺼번에 적용됩니다.</p>
+  <p class="lead">주소를 조회하면 용도지역·지역지구·대지면적·지자체가 자동으로 들어가고, 지자체 조례 기준이 한꺼번에 적용됩니다. 입력하는 동안 오른쪽(모바일은 아래) 실시간 검토에 결과가 바로 표시됩니다.</p>
+  <div class="infoWrap"><div class="infoMain">
   <fieldset><legend>주소로 자동 세팅</legend>
     <div class="addr"><input id="addrIn" placeholder="지번 또는 도로명 주소 (예: 화성시 남양읍 남양리 1234)"><button class="primary" id="addrBtn">조회</button></div>
     <p id="addrMsg">지번 또는 도로명 주소를 넣고 조회하세요. 조회가 안 되면 아래에서 지자체·용도지역을 직접 고를 수 있습니다.</p>
@@ -172,6 +182,14 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
     <label class="ck"><input type="checkbox" data-f="parkingFloor">주차 용도 층·기계식 주차</label>
     <label class="ck"><input type="checkbox" data-f="combustible750">특수가연물 750배 이상</label>
   </div></fieldset>
+  <fieldset><legend>높이 제한 (고도지구·지구단위·국가유산·비행안전·정북일조)</legend><div class="grid">
+    <label class="ck"><input type="checkbox" data-f="heightDistrict">고도지구 (주소 조회 시 자동)</label>
+    <label class="ck"><input type="checkbox" data-f="heritageZone">국가유산(문화재) 주변 역사문화환경 보존지역</label>
+    <label class="ck"><input type="checkbox" data-f="flightZone">비행안전구역·공항 장애물제한표면</label>
+    <label>최고높이 제한 (m)<input data-f="hLimit" inputmode="decimal"><small>기준이 여럿이면 가장 낮은 값</small></label>
+    <label>제한 근거<select data-f="hLimitSrc"><option value="">선택</option><option>고도지구</option><option>지구단위계획</option><option>가로구역별 최고높이(건축법 제60조)</option><option>경관지구·경관계획</option><option>국가유산 현상변경 허용기준</option><option>비행안전구역(군사기지법)</option><option>공항 장애물제한표면(공항시설법)</option><option>기타</option></select></label>
+    <label>정북방향 인접대지경계선까지 거리 (m)<input data-f="northDist" inputmode="decimal"><small>전용·일반주거지역만 검토</small></label>
+  </div></fieldset>
   <fieldset><legend>분리 공작물 (건축물과 따로 설치하는 것만, 없으면 비움)</legend><div class="grid">
     <label>옹벽·담장 최고 높이 (m)<input data-f="stWall" inputmode="decimal"></label>
     <label>굴뚝 높이 (m)<input data-f="stChimney" inputmode="decimal"></label>
@@ -192,6 +210,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
     <label>용적률 직접 지정 (%)<input data-f="farLimit" inputmode="decimal"></label>
   </div></fieldset>
   <fieldset><legend>편의시설 치수 (해당 시)</legend><div class="grid" id="bfInputs"></div></fieldset>
+  </div><aside id="liveNums" class="card live" aria-live="polite"></aside></div>
 </section>
 
 <section class="panel" data-tab="app" hidden>
