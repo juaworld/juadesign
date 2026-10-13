@@ -38,18 +38,47 @@
     const m = text.match(/(\d+(?:\.\d+)?)\s*(?:퍼센트|%|％)/) || text.match(/100분의\s*(\d+(?:\.\d+)?)/);
     return m ? parseFloat(m[1]) : null;
   }
+  function expandZones(t) { // "제1종·제2종전용주거지역" → 제1종전용주거지역 제2종전용주거지역
+    return t.replace(/((?:제[123]종[·ㆍ,및]*){2,})(전용|일반)주거지역/g, (m, a, b) => a.match(/제[123]종/g).map(x => x + b + '주거지역').join('·'))
+      .replace(/((?:(?:보전|생산|자연)[·ㆍ,및]*){2,})녹지지역/g, (m, a) => a.match(/보전|생산|자연/g).map(x => x + '녹지지역').join('·'))
+      .replace(/((?:(?:보전|생산|계획)[·ㆍ,및]*){2,})관리지역/g, (m, a) => a.match(/보전|생산|계획/g).map(x => x + '관리지역').join('·'))
+      .replace(/((?:(?:중심|일반|근린|유통)[·ㆍ,및]*){2,})상업지역/g, (m, a) => a.match(/중심|일반|근린|유통/g).map(x => x + '상업지역').join('·'))
+      .replace(/((?:(?:전용|일반|준)[·ㆍ,및]*){2,})공업지역/g, (m, a) => a.match(/전용|일반|준/g).map(x => x + '공업지역').join('·'));
+  }
   function parseZoneTable(text) {
-    // 제1항만 대상 (② 이후 특례 제외)
+    // 제1항만 대상 (② 이후 특례 제외), 호 단위로 "지역명들 : N퍼센트"
     let body = text; const cut = body.search(/②/); if (cut > 0) body = body.slice(0, cut);
-    const t = nospace(body).replace(/ㆍ/g, '·');
+    const t = expandZones(nospace(body).replace(/ㆍ/g, '·'));
     const out = {};
-    for (const z of ZONE_NAMES) {
-      const i = t.indexOf(z); if (i < 0) continue;
-      const seg = t.slice(i + z.length, i + z.length + 40);
-      const p = percentOf(seg);
-      if (p !== null && !(z in out)) out[z] = p;
+    const items = t.split(/(?<=[^\d제])(?=\d{1,2}\.)/);
+    for (const it of items) {
+      const p = percentOf(it); if (p === null) continue;
+      const head = it.split(/\d+(?:\.\d+)?(?:퍼센트|%|％)|100분의/)[0];
+      for (const z of ZONE_NAMES) if (head.includes(z) && !(z in out)) out[z] = p;
+    }
+    if (Object.keys(out).length < 5) { // 호 구분이 없는 서술형
+      for (const z of ZONE_NAMES) { const i = t.indexOf(z); if (i < 0 || z in out) continue; const p = percentOf(t.slice(i + z.length, i + z.length + 40)); if (p !== null) out[z] = p; }
     }
     return out;
+  }
+  function parseZoneBylaw(text, mode) { // 별표(표) — 셀 순서로 "지역 ‖ 건폐율 ‖ 용적률"
+    const cells = expandZones(String(text).replace(/ㆍ/g, '·')).split(/‖|\n/).map(c => nospace(c)).filter(Boolean);
+    const bcr = {}, far = {};
+    for (let i = 0; i < cells.length; i++) {
+      const zs = ZONE_NAMES.filter(z => cells[i].includes(z) && cells[i].length < z.length * 6);
+      if (!zs.length) continue;
+      const nums = [];
+      for (let j = i + 1; j < Math.min(cells.length, i + 6) && nums.length < 2; j++) {
+        if (ZONE_NAMES.some(z => cells[j].includes(z))) break;
+        const m = cells[j].match(/^(\d+(?:\.\d+)?)(?:퍼센트|%|％)?(?:이하)?$/) || cells[j].match(/(\d+(?:\.\d+)?)(?:퍼센트|%|％)/);
+        if (m) nums.push(parseFloat(m[1]));
+      }
+      for (const z of zs) {
+        if (mode === 'far') { if (nums[0] != null && !(z in far)) far[z] = nums[0]; }
+        else { if (nums[0] != null && !(z in bcr)) bcr[z] = nums[0]; if (mode === 'both' && nums[1] != null && !(z in far)) far[z] = nums[1]; }
+      }
+    }
+    return { bcr, far };
   }
   function parsePlan(arts) {
     const bcrA = arts.find(a => /용도지역/.test(a.title) && /건폐율/.test(a.title) && !/완화|강화|특례|기타/.test(a.title)) || arts.find(a => /건폐율/.test(a.title) && ZONE_NAMES.filter(z => nospace(a.text).includes(z)).length > 8);
@@ -201,6 +230,11 @@
     return m ? parseFloat(m[1]) : null;
   }
 
+  function findBylaw(L, n) {
+    const list = [].concat(L?.별표?.별표단위 || []);
+    return list.find(b => new RegExp('별표\\s*' + n + '(?![\\d의])').test(b.별표제목 || '')) || list.find(b => { const m = String(b.별표제목 || '').match(/별표\s*(\d+)\s*[~∼\-]\s*(?:별표\s*)?(\d+)/); return m && +m[1] <= +n && +n <= +m[2]; }) || list.find(b => +b.별표번호 === +n && (b.별표구분 || '별표') === '별표');
+  }
+
   /* ---------- 검색 ---------- */
   async function searchOrdin(env, query) {
     const out = []; let page = 1, total = 1;
@@ -215,19 +249,21 @@
     plan: { queries: ['도시계획 조례', '군계획 조례', '도시·군계획 조례'], ok: n => /(도시|군|도시·군|도시ㆍ군)\s*계획\s*조례$/.test(n) && !/시행규칙|위원회|특별회계|기금/.test(n) },
     bld: { queries: ['건축 조례'], ok: n => /건축\s*조례$/.test(n) && !/관리|심의|안전|미술|디자인|허가|분쟁|자산|문화|기본|에너지|녹색|한옥|공공/.test(n) },
     scape: { queries: ['경관 조례'], ok: n => /경관\s*조례$/.test(n) && !/야간|농촌|산림|하천|공공디자인/.test(n) },
-    park: { queries: ['주차장 설치 및 관리 조례', '주차장 조례'], ok: n => /주차장/.test(n) && /조례$/.test(n) && !/공영|특별회계|기금|운영|시행규칙|거주자|요금|무료/.test(n) }
+    park: { queries: ['주차장 설치 및 관리 조례', '주차장 조례', '주차장 설치 및 관리 운영'], ok: n => /주차장/.test(n) && /조례$/.test(n) && !/공영|특별회계|기금|시행규칙|거주자|요금|무료|공유|셔틀|임시|민영|청사|소속기관|부설주차장 관리|개방/.test(n), score: n => (/설치/.test(n) ? 10 : 0) + (/주차장\s*조례$/.test(n) ? 5 : 0) }
   };
   const METRO = ['서울특별시','부산광역시','대구광역시','인천광역시','광주광역시','대전광역시','울산광역시'];
-  const SIDO = ['서울특별시','부산광역시','대구광역시','인천광역시','광주광역시','대전광역시','울산광역시','세종특별자치시','경기도','강원특별자치도','충청북도','충청남도','전북특별자치도','전라남도','경상북도','경상남도','제주특별자치도'];
+  const LEGACY = { '전남광주통합특별시': gu => (/^(동구|서구|남구|북구|광산구)$/.test(gu) ? '(구)광주광역시' : '(구)전라남도') };
+  const SIDO = ['전남광주통합특별시','서울특별시','부산광역시','대구광역시','인천광역시','광주광역시','대전광역시','울산광역시','세종특별자치시','경기도','강원특별자치도','충청북도','충청남도','전북특별자치도','전라남도','경상북도','경상남도','제주특별자치도'];
 
   async function buildLocal(env, opts = {}) {
     const lists = {};
     for (const [k, def] of Object.entries(KINDS)) {
       const map = {};
       for (const q of def.queries) for (const it of await searchOrdin(env, q)) {
-        const nm = norm(it.자치법규명), org = norm(it.지자체기관명);
+        const nm = norm(it.자치법규명).replace(/\s*\[[^\]]*\]\s*$/, ''), org = norm(it.지자체기관명);
         if (it.자치법규종류 !== '조례' || !def.ok(nm) || !org) continue;
-        if (!map[org] || nm.length < map[org].name.length) map[org] = { name: nm, mst: it.자치법규일련번호, date: it.시행일자, pub: it.공포일자 };
+        const sc = (def.score ? def.score(nm) : 0) - nm.length / 100;
+        if (!map[org] || sc > map[org].sc) map[org] = { name: nm, mst: it.자치법규일련번호, date: it.시행일자, pub: it.공포일자, sc };
       }
       lists[k] = map; env.log('[' + k + '] ' + Object.keys(map).length + '건');
     }
@@ -237,21 +273,41 @@
       const parts = org.split(' '); const sido = parts[0];
       if (!SIDO.includes(sido)) continue;
       if (parts.length === 1 && !['세종특별자치시', '제주특별자치도'].includes(sido)) continue; // 광역 단위는 상위 조례로만 사용
-      regions[org] = { sido, sgg: parts.slice(1).join(' ') || '(전역)', parent: parts.length > 1 ? sido : null, metroGu: parts.length > 1 && METRO.includes(sido) };
+      const sgg = parts.slice(1).join(' ') || '(전역)';
+      const legacy = LEGACY[sido] ? LEGACY[sido](sgg) : null;
+      regions[org] = { sido, sgg, parent: parts.length > 1 ? sido : null, legacy, metroGu: parts.length > 1 && (METRO.includes(sido) || legacy === '(구)광주광역시') };
     }
     const cache = {};
     const getOrd = async (mst) => { if (!cache[mst]) { cache[mst] = (await env.getJSON('/DRF/lawService.do', { target: 'ordin', type: 'JSON', MST: mst })).LawService; await env.sleep(80); } return cache[mst]; };
-    const pickSrc = (kind, org) => lists[kind][org] || (regions[org]?.parent ? lists[kind][regions[org].parent] : null);
+    const parentsOf = R => [R.parent, R.legacy].filter(Boolean);
+    const srcList = (kind, org, R) => [lists[kind][org]].concat(parentsOf(R).map(x => lists[kind][x])).filter(Boolean);
     const names = Object.keys(regions).filter(o => !opts.only || opts.only.includes(o));
     let i = 0;
     for (const org of names) {
       const R = regions[org]; i++;
       try {
         // 도시계획 (자치구는 광역시 조례)
-        const ps = R.metroGu ? (lists.plan[R.parent] || lists.plan[org]) : (lists.plan[org] || (R.parent ? lists.plan[R.parent] : null));
-        if (ps) { const P = parsePlan(ordinArticles(await getOrd(ps.mst))); R.plan = { ...P, src: ps }; }
+        const ps = R.metroGu ? (parentsOf(R).map(x => lists.plan[x]).filter(Boolean)[0] || lists.plan[org]) : srcList('plan', org, R)[0];
+        if (ps) {
+          const Lp = await getOrd(ps.mst); const P = parsePlan(ordinArticles(Lp));
+          // 조문이 "별표 N에 따른다"인 경우 별표 파일을 읽는다
+          const needB = Object.keys(P.bcr).length < 5, needF = Object.keys(P.far).length < 5;
+          const tasks = P.bcrArt && P.bcrArt === P.farArt ? [['both', P.bcrText]] : [['bcr', P.bcrText], ['far', P.farText]];
+          for (const [mode, txt] of tasks) {
+            if ((mode === 'bcr' && !needB) || (mode === 'far' && !needF) || (mode === 'both' && !needB && !needF)) continue;
+            const mm = String(txt).match(/별표\s*(\d+)/); if (!mm) continue;
+            const b = findBylaw(Lp, mm[1]); if (!b || !b.별표첨부파일명) continue;
+            try {
+              const by = await env.getBytes(b.별표첨부파일명); const T = await attachmentText(by, env); const Z = parseZoneBylaw(T, mode);
+              if (needB && Object.keys(Z.bcr).length) P.bcr = Z.bcr;
+              if (needF && Object.keys(Z.far).length) P.far = Z.far;
+              P[mode + 'Bylaw'] = b.별표제목; await env.sleep(80);
+            } catch (e) { env.log('별표 실패', org, e.message); }
+          }
+          R.plan = { ...P, src: ps };
+        }
         // 건축조례 (조경 조항이 없으면 상위 조례)
-        for (const src of [lists.bld[org], R.parent ? lists.bld[R.parent] : null].filter(Boolean)) {
+        for (const src of srcList('bld', org, R)) {
           const B = parseBuilding(ordinArticles(await getOrd(src.mst)));
           if (!R.bld) R.bld = { ...B, src };
           if (B.scapeText && !R.bld.scapeText) Object.assign(R.bld, { scapeArt: B.scapeArt, scapeText: B.scapeText, scapeTiers: B.scapeTiers, scapeFrom: src.name });
@@ -259,15 +315,17 @@
           if (R.bld.scapeText && R.bld.cmteText) break;
         }
         // 경관조례
-        for (const src of [lists.scape[org], R.parent ? lists.scape[R.parent] : null].filter(Boolean)) {
+        for (const src of srcList('scape', org, R)) {
           const S = parseLandscapeOrd(ordinArticles(await getOrd(src.mst)));
           if (S.bldText) { R.scape = { ...S, src }; break; }
         }
         // 주차장 조례 (부설주차장 별표)
-        for (const src of [lists.park[org], R.parent ? lists.park[R.parent] : null].filter(Boolean)) {
+        for (const src of srcList('park', org, R)) {
           const L = await getOrd(src.mst);
           const arts = ordinArticles(L);
-          const bp = [].concat(L?.별표?.별표단위 || []).find(b => /부설주차장/.test(b.별표제목 || '') && /설치/.test(b.별표제목 || '')) || [].concat(L?.별표?.별표단위 || []).find(b => /설치대상\s*시설물/.test(b.별표제목 || ''));
+          const refArt = arts.find(a => /부설주차장/.test(a.title) && /설치/.test(a.title) && /별표\s*\d+/.test(a.text) && !/비용|면제|인근|기계식/.test(a.title));
+          const refN = refArt ? (refArt.text.match(/설치기준[^.]{0,30}?별표\s*(\d+)/) || refArt.text.match(/별표\s*(\d+)/))[1] : null;
+          const bp = [].concat(L?.별표?.별표단위 || []).find(b => /부설주차장/.test(b.별표제목 || '') && /설치/.test(b.별표제목 || '')) || [].concat(L?.별표?.별표단위 || []).find(b => /설치대상\s*시설물/.test(b.별표제목 || '')) || (refN ? findBylaw(L, refN) : null);
           let text = bp && norm(bp.별표내용).length > 50 ? String(bp.별표내용) : '';
           let fileType = text ? 'text' : null;
           if (!text && bp && bp.별표첨부파일명) {
@@ -320,7 +378,7 @@
     { id: 'bld32', law: '건축법 시행령', art: '32' },
     { id: 'bld55', law: '건축법 시행령', art: '5의5' },
     { id: 'bld11', law: '건축법 시행령', art: '11' },
-    { id: 'fire7', law: '소방시설 설치 및 관리에 관한 법률 시행령', art: '7', check: [/연면적[^0-9]{0,80}?(\d+)제곱미터 이상인 건축물이나 시설/, 400] },
+    { id: 'fire7', law: '소방시설 설치 및 관리에 관한 법률 시행령', art: '7', check: [/(\d+)\s*제곱미터 이상인 건축물이나 시설/, 400] },
     { id: 'trafficB1', law: '도시교통정비 촉진법 시행령', bylaw: /교통영향평가 대상사업의 범위/, slice: /2\. 건축물[\s\S]{0,6000}/ },
     { id: 'under13', law: '지하안전관리에 관한 특별법 시행령', art: '13', check: [/굴착깊이[\s\S]{0,200}?가\s*(\d+)미터 이상/, 20] },
     { id: 'under23', law: '지하안전관리에 관한 특별법 시행령', art: '23', check: [/굴착깊이가\s*(\d+)미터 이상/, 10] },
@@ -360,5 +418,5 @@
     return { laws, evidence, checks, parkNat };
   }
 
-  G.SyncCore = { buildLocal, buildNational, parsePlan, parseBuilding, parseLandscapeOrd, parseParkingTable, parseScapeTiers, attachmentText, ordinArticles, koNum, disabledRatio, ZONE_NAMES };
+  G.SyncCore = { parseZoneBylaw, expandZones, findBylaw, parseZoneTable, buildLocal, buildNational, parsePlan, parseBuilding, parseLandscapeOrd, parseParkingTable, parseScapeTiers, attachmentText, ordinArticles, koNum, disabledRatio, ZONE_NAMES };
 })(typeof globalThis !== 'undefined' ? globalThis : window);
