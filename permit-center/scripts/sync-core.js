@@ -348,7 +348,7 @@
   const NATIONAL = [
     { name: '건축법 시행령', reviews: ['permit','struct','cmte'] },
     { name: '건축법 시행규칙', reviews: ['permit'] },
-    { name: '국토의 계획 및 이용에 관한 법률 시행령', reviews: ['permit','env'] },
+    { name: '국토의 계획 및 이용에 관한 법률 시행령', reviews: ['permit','dev'] },
     { name: '녹색건축물 조성 지원법 시행령', reviews: ['energy','zeb'] },
     { name: '건축물의 에너지절약설계기준', admrul: true, reviews: ['energy'] },
     { name: '장애인ㆍ노인ㆍ임산부 등의 편의증진 보장에 관한 법률 시행령', reviews: ['ba','bf'] },
