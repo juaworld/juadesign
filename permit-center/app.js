@@ -554,10 +554,19 @@ function jsonp(url) {
 }
 function vw(path, params) {
   var key = lsGet(KEYSTORE) || (window.VPC_SETTINGS && VPC_SETTINGS.vworldKey); if (!key) return Promise.reject(new Error('VWorld API 키가 아직 등록되지 않아 주소 자동조회가 꺼져 있습니다. 상단 [관리자] 로그인 → VWorld 키 붙여넣기 → [전체 직원에게 적용]'));
-  var q = new URLSearchParams(Object.assign({ key: key, domain: location.origin, format: 'json' }, params)).toString();
-  var url = VW + path + '?' + q;
-  return fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).catch(function () { return jsonp(url); });
+  var doms = VW_DOM ? [VW_DOM] : [location.origin, location.origin + location.pathname.replace(/[^/]*$/, ''), location.origin + '/'];
+  var go = function (i) {
+    var url = VW + path + '?' + new URLSearchParams(Object.assign({ key: key, domain: doms[i], format: 'json' }, params)).toString();
+    return fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).catch(function () { return jsonp(url); }).then(function (j) {
+      var e = j && j.response && j.response.status === 'ERROR' && j.response.error;
+      if (e && /KEY|DOMAIN/i.test(e.code || '') && i + 1 < doms.length) return go(i + 1);
+      if (!e) VW_DOM = doms[i];
+      return j;
+    });
+  };
+  return go(0);
 }
+var VW_DOM = null;
 function feats(j) { return j && j.response && j.response.result && j.response.result.featureCollection ? j.response.result.featureCollection.features || [] : []; }
 function polyArea(g) { // 경위도(EPSG:4326) 다각형 → 국지 평면 근사 면적(㎡)
   if (!g) return 0; var polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
