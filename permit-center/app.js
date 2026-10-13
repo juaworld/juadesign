@@ -41,7 +41,7 @@ var DEFAULT_P = {
 var state = loadState();
 function newProject(name) { var p = JSON.parse(JSON.stringify(DEFAULT_P)); p.name = name || '새 프로젝트'; return { id: uid(), p: p, files: [], manual: {}, created: new Date().toISOString() }; }
 function loadState() {
-  try { var s = JSON.parse(lsGet(STORE)); if (s && s.projects && s.projects.length) { s.projects.forEach(function (x) { x.p = Object.assign(JSON.parse(JSON.stringify(DEFAULT_P)), x.p); }); return s; } } catch (e) {}
+  try { var s = JSON.parse(lsGet(STORE)); if (s && s.projects && s.projects.length) { s.projects.forEach(function (x) { x.p = Object.assign(JSON.parse(JSON.stringify(DEFAULT_P)), x.p); ['height', 'eaves', 'span', 'northDist', 'cutFill', 'hLimit'].forEach(function (k) { if (num(x.p[k]) > 300) x.p[k] = String(Math.round(num(x.p[k])) / 1000); }); }); return s; } } catch (e) {}
   var pr = newProject('예시: 화성시 공장 신축');
   Object.assign(pr.p, { region: '경기도 화성시', siteArea: '6500', bldgArea: '2400', gfa: '3200', gfaFar: '3200', floorsAbove: '2', height: '14.5', eaves: '11', span: '24', parkingPlan: '12', disabledParkingPlan: '1', landscapePlan: '700' });
   return { cur: pr.id, projects: [pr] };
@@ -439,7 +439,7 @@ function numericChecks(prj) {
   var H = num(p.height), hFlags = [];
   if (p.heightDistrict) hFlags.push('고도지구'); if (p.districtPlan) hFlags.push('지구단위계획'); if (p.landscapeDistrict) hFlags.push('경관지구'); if (p.heritageZone) hFlags.push('국가유산 주변'); if (p.flightZone) hFlags.push('비행안전구역·공항');
   if (num(p.hLimit) > 0) out.push({ rid: 'permit', label: '최고높이', val: H ? fmt(H) + 'm' : '미입력', lim: fmt(num(p.hLimit)) + 'm 이하 (' + (p.hLimitSrc || '직접 입력') + ')', ok: H ? H <= num(p.hLimit) : null, note: (H && H <= num(p.hLimit) && num(p.hLimit) - H < 1 ? '여유 1m 미만 — 옥탑·파라펫·설비 높이 포함 여부 재확인. ' : '') + (p.hLimitNote && (!H || H > num(p.hLimit)) ? p.hLimitNote + ' 가능' : '') });
-  else if (hFlags.length) out.push({ rid: 'permit', label: '최고높이', val: H ? fmt(H) + 'm' : '미입력', lim: hFlags.join('·') + ' 높이 기준 입력 필요', ok: null, note: (p.pnu ? '주소란 아래 "토지이음에서 이 필지 열람" → 층수·높이제한 탭. ' : '') + '고도지구·지구단위계획: 토지이음 도시계획 결정도 / 국가유산: 국가유산청 현상변경 허용기준 / 비행안전구역: 관할 부대 협의 / 공항: 장애물제한표면' });
+  else if (hFlags.length) out.push({ rid: 'permit', label: '최고높이', val: H ? fmt(H) + 'm' : '미입력', lim: hFlags.join('·') + ' 결정 높이 — 공개 데이터에 수치 없음, 확인 후 입력', ok: null, note: (p.pnu ? '주소란 아래 "토지이음에서 이 필지 열람" → 층수·높이제한 탭. ' : '') + '고도지구·지구단위계획: 토지이음 도시계획 결정도 / 국가유산: 국가유산청 현상변경 허용기준 / 비행안전구역: 관할 부대 협의 / 공항: 장애물제한표면' });
   if (/전용주거|일반주거/.test(p.zone) && H > 0) { var nNeed = H <= 10 ? 1.5 : H / 2, nHas = p.northDist !== '' && p.northDist != null; out.push({ rid: 'permit', label: '정북방향 일조 이격', val: nHas ? fmt(num(p.northDist)) + 'm' : '미입력', lim: fmt(nNeed, 2) + 'm 이상 (높이 ' + fmt(H) + 'm: 10m 이하 부분 1.5m, 초과 부분은 높이의 1/2 — 건축법 시행령 제86조)', ok: nHas ? num(p.northDist) >= nNeed : null, note: '최고 높이 부분 기준. 정북 방향이 도로·공원·하천 등에 접하면 완화 (제86조제3항)' }); }
   if (app.energy.lvl === 'req') {
     var auto = prj.files.map(function (f) { return f.epi; }).filter(Boolean);
@@ -701,7 +701,10 @@ function applyLookup(o) {
   var hdName = (E ? E.marks : []).filter(function (n) { return /고도지구/.test(n); }).sort(function (a, b) { var x = a.match(/(\d+(?:\.\d+)?)\s*m/), y = b.match(/(\d+(?:\.\d+)?)\s*m/); return (x ? +x[1] : 1e9) - (y ? +y[1] : 1e9); })[0] || '', hm = hdName.match(/(\d+(?:\.\d+)?)\s*m\s*이하/), hx = hdName.match(/완화[^\d]*(\d+(?:\.\d+)?)\s*m/);
   if (hdName) p.heightDistrict = true;
   if (hm) { p.hLimit = hm[1]; p.hLimitSrc = '고도지구'; p.hLimitNote = hx ? '경관 가이드라인 등 완화 시 ' + hx[1] + 'm' : ''; notes.push(hdName + ' → 최고높이 ' + hm[1] + 'm 자동 입력' + (hx ? ' (완화 시 ' + hx[1] + 'm)' : '')); }
-  else if (p.heightDistrict) { var hv = autoHeight(p); if (hv) { p.hLimit = String(hv.h); p.hLimitSrc = '고도지구'; notes.push('고도지구 최고높이 ' + hv.h + 'm 자동 입력 (' + hv.src + ')'); } else notes.push('고도지구' + (p.hdKey ? '(고시 ' + p.hdKey + ')' : '') + ' 높이는 공개 데이터에 없음 → 토지이음 열람 후 관리자 화면 "고도지구 최고높이"에 한 번 등록하면 같은 고도지구는 이후 자동 입력'); }
+  var dpNames = (E ? E.marks : []).filter(function (n) { return /지구단위계획/.test(n); });
+  if (!hm && dpNames.length) notes.push(dpNames.join(', ') + ' → 최고높이는 지구단위계획 결정도서(구역별 높이계획)에만 있고 공개 데이터에 수치가 없음' + (/문의/.test(dpNames.join()) ? ' — 토지이음 표기대로 해당 구청 도시계획과 확인' : '') + '. 확인한 값은 "최고높이 제한" 칸에 입력');
+  else if (!hm && !p.heightDistrict && E) notes.push('높이: 고도지구·지구단위계획 등 높이 제한 지역 아님 (토지이음 기준)' + (/전용주거|일반주거/.test(p.zone) ? ' — 정북 일조 이격만 검토' : ''));
+  if (hm) {} else if (p.heightDistrict) { var hv = autoHeight(p); if (hv) { p.hLimit = String(hv.h); p.hLimitSrc = '고도지구'; notes.push('고도지구 최고높이 ' + hv.h + 'm 자동 입력 (' + hv.src + ')'); } else notes.push('고도지구' + (p.hdKey ? '(고시 ' + p.hdKey + ')' : '') + ' 높이는 공개 데이터에 없음 → 토지이음 열람 후 관리자 화면 "고도지구 최고높이"에 한 번 등록하면 같은 고도지구는 이후 자동 입력'); }
   if (o.full) notes.unshift('대지: ' + o.full);
   save(); ensureDetail(p); renderAll();
   return notes;
@@ -944,7 +947,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   document.addEventListener('input', function (e) {
     var el = e.target, p = cur().p;
-    if (el.dataset.f) { p[el.dataset.f] = el.type === 'checkbox' ? el.checked : el.value; if (el.dataset.f === 'siteArea') p.siteAreaAuto = false; if (el.dataset.f === 'hLimit') p.hLimitNote = ''; if (el.dataset.f === 'name') renderProjectSel(); if (el.dataset.f === 'use') bindForm(); }
+    if (el.dataset.f) { p[el.dataset.f] = el.type === 'checkbox' ? el.checked : el.value; if (el.dataset.f === 'siteArea') p.siteAreaAuto = false; if (['height', 'eaves', 'span', 'northDist', 'cutFill', 'hLimit'].indexOf(el.dataset.f) >= 0 && num(el.value) > 300) { p[el.dataset.f] = String(Math.round(num(el.value)) / 1000); toast(el.value + ' → ' + p[el.dataset.f] + 'm 로 바꿨습니다 (mm로 입력된 것으로 판단, 이 칸은 m 단위)'); } if (el.dataset.f === 'hLimit') p.hLimitNote = ''; if (el.dataset.f === 'name') renderProjectSel(); if (el.dataset.f === 'use') bindForm(); }
     else if (el.dataset.bf) { p.bf[el.dataset.bf] = el.value; }
     else return;
     if (el.closest('.ask')) { save(); renderAll(); return; }
