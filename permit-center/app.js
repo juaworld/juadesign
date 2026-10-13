@@ -34,7 +34,7 @@ var STORE = 'vpc2_state', KEYSTORE = 'vpc2_vwkey';
 var DEFAULT_P = {
   name: '새 프로젝트', address: '', pnu: '', landUses: [], region: '', zone: '계획관리지역', use: '공장', nbSub: '', owner: '민간', work: '신축',
   siteArea: '', bldgArea: '', gfa: '', gfaFar: '', addArea: '', floorsAbove: '', floorsBelow: '0', height: '', eaves: '', span: '', cantilever: false, flatSlab: false,
-  excavation: '0', hvac: '있음', emp50: '', landCat: '', cutFill: '', growthPlan: false, devCmteEx: '', stWall: '', stChimney: '', stTower: '', stTank: '', stPv: '', stMast: '', stShelter: '', stPark: false, stSilo: false, siteAreaAuto: false, parcels: [], zoneMix: [], hLimitNote: '', eumPrice: '', eumMark3: '', heightDistrict: false, heritageZone: false, flightZone: false, hLimit: '', hLimitSrc: '', northDist: '', rooms: '', households: '', industrialComplex: false, landscapeDistrict: false, keyLandscapeArea: false,
+  excavation: '0', hvac: '있음', emp50: '', landCat: '', cutFill: '', growthPlan: false, devCmteEx: '', stWall: '', stChimney: '', stTower: '', stTank: '', stPv: '', stMast: '', stShelter: '', stPark: false, stSilo: false, siteAreaAuto: false, aslLimit: '', aslSrc: '', groundEl: '', parcels: [], zoneMix: [], hLimitNote: '', eumPrice: '', eumMark3: '', heightDistrict: false, heritageZone: false, flightZone: false, hLimit: '', hLimitSrc: '', northDist: '', rooms: '', households: '', industrialComplex: false, landscapeDistrict: false, keyLandscapeArea: false,
   districtPlan: false, greenbelt: false, separateAdd: false, mountain: '없음', parkingFloor: false, combustible750: false, trafficZone: '',
   parkingPlan: '', disabledParkingPlan: '', landscapePlan: '', bcrLimit: '', farLimit: '', epi: '', bf: {}, scapeAns: {}
 };
@@ -437,9 +437,10 @@ function numericChecks(prj) {
     else out.push({ rid: 'permit', label: '조경면적', val: p.landscapePlan || '-', lim: ln.note, ok: null });
   }
   var H = num(p.height), hFlags = [];
-  if (p.heightDistrict) hFlags.push('고도지구'); if (p.districtPlan) hFlags.push('지구단위계획'); if (p.landscapeDistrict) hFlags.push('경관지구'); if (p.heritageZone) hFlags.push('국가유산 주변'); if (p.flightZone) hFlags.push('비행안전구역·공항');
+  if (p.heightDistrict) hFlags.push('고도지구'); if (p.districtPlan) hFlags.push('지구단위계획'); if (p.landscapeDistrict) hFlags.push('경관지구'); if (p.heritageZone) hFlags.push('국가유산 주변'); if (p.flightZone && !num(p.aslLimit)) hFlags.push('비행안전구역·공항');
   if (num(p.hLimit) > 0) out.push({ rid: 'permit', label: '최고높이', val: H ? fmt(H) + 'm' : '미입력', lim: fmt(num(p.hLimit)) + 'm 이하 (' + (p.hLimitSrc || '직접 입력') + ')', ok: H ? H <= num(p.hLimit) : null, note: (H && H <= num(p.hLimit) && num(p.hLimit) - H < 1 ? '여유 1m 미만 — 옥탑·파라펫·설비 높이 포함 여부 재확인. ' : '') + (p.hLimitNote && (!H || H > num(p.hLimit)) ? p.hLimitNote + ' 가능' : '') });
   else if (hFlags.length) out.push({ rid: 'permit', label: '최고높이', val: H ? fmt(H) + 'm' : '미입력', lim: hFlags.join('·') + ' 결정 높이 — 공개 데이터에 수치 없음, 확인 후 입력', ok: null, note: (p.pnu ? '주소란 아래 "토지이음에서 이 필지 열람" → 층수·높이제한 탭. ' : '') + '고도지구·지구단위계획: 토지이음 도시계획 결정도 / 국가유산: 국가유산청 현상변경 허용기준 / 비행안전구역: 관할 부대 협의 / 공항: 장애물제한표면' });
+  if (num(p.aslLimit) > 0) { var g = num(p.groundEl), hasG = p.groundEl !== '' && p.groundEl != null; out.push({ rid: 'permit', label: '해발 고도제한', val: hasG && H ? '지반 ' + fmt(g) + 'm + 건물 ' + fmt(H) + 'm = 해발 ' + fmt(g + H) + 'm' : (H ? '건물 ' + fmt(H) + 'm (지반고 미입력)' : '미입력'), lim: '해발 ' + fmt(num(p.aslLimit)) + 'm 이하 → 건물 최대 ' + (hasG ? fmt(num(p.aslLimit) - g) + 'm' : '(해발 − 지반고)') + ' (' + p.aslSrc + ')', ok: hasG && H ? g + H <= num(p.aslLimit) : null, note: hasG ? '옥탑·피뢰침·안테나 포함 최상단 기준' : '"대지 지반고(해발)" 칸에 측량도 지반고를 넣으면 판정' }); }
   if (/전용주거|일반주거/.test(p.zone) && H > 0) { var nNeed = H <= 10 ? 1.5 : H / 2, nHas = p.northDist !== '' && p.northDist != null; out.push({ rid: 'permit', label: '정북방향 일조 이격', val: nHas ? fmt(num(p.northDist)) + 'm' : '미입력', lim: fmt(nNeed, 2) + 'm 이상 (높이 ' + fmt(H) + 'm: 10m 이하 부분 1.5m, 초과 부분은 높이의 1/2 — 건축법 시행령 제86조)', ok: nHas ? num(p.northDist) >= nNeed : null, note: '최고 높이 부분 기준. 정북 방향이 도로·공원·하천 등에 접하면 완화 (제86조제3항)' }); }
   if (app.energy.lvl === 'req') {
     var auto = prj.files.map(function (f) { return f.epi; }).filter(Boolean);
@@ -665,7 +666,7 @@ function eumFetch(pnu) {
 }
 function applyLookup(o) {
   var p = cur().p, E = o.eum, names = (o.uses || []).map(function (u) { return nospace(u.name); }).concat(E ? E.marks.map(nospace) : []), notes = [];
-  if ((p.pnu || '') !== (o.pnu || '')) { p.heightDistrict = false; p.heritageZone = false; p.flightZone = false; p.keyLandscapeArea = false; p.growthPlan = false; p.mountain = '없음'; p.devCmteEx = ''; p.hLimit = ''; p.hLimitSrc = ''; p.hLimitNote = ''; p.hdKey = ''; p.siteAreaAuto = true; }
+  if ((p.pnu || '') !== (o.pnu || '')) { p.aslLimit = ''; p.aslSrc = ''; p.heightDistrict = false; p.heritageZone = false; p.flightZone = false; p.keyLandscapeArea = false; p.growthPlan = false; p.mountain = '없음'; p.devCmteEx = ''; p.hLimit = ''; p.hLimitSrc = ''; p.hLimitNote = ''; p.hdKey = ''; p.siteAreaAuto = true; }
   p.address = o.full || o.addr; p.pnu = o.pnu || ''; p.landUses = E && E.marks.length ? E.marks.slice() : (o.uses || []).map(function (u) { return u.name + (u.rel ? '(' + u.rel + ')' : ''); });
   if (E) { p.eumPrice = E.price; p.eumMark3 = E.m3; }
   var z = Object.keys(ZONES).filter(function (k) { return names.indexOf(k) >= 0; })[0] || Object.keys(ZONES).filter(function (k) { return nospace(o.zone1) === k; })[0];
@@ -701,6 +702,8 @@ function applyLookup(o) {
   var hdName = (E ? E.marks : []).filter(function (n) { return /고도지구/.test(n); }).sort(function (a, b) { var x = a.match(/(\d+(?:\.\d+)?)\s*m/), y = b.match(/(\d+(?:\.\d+)?)\s*m/); return (x ? +x[1] : 1e9) - (y ? +y[1] : 1e9); })[0] || '', hm = hdName.match(/(\d+(?:\.\d+)?)\s*m\s*이하/), hx = hdName.match(/완화[^\d]*(\d+(?:\.\d+)?)\s*m/);
   if (hdName) p.heightDistrict = true;
   if (hm) { p.hLimit = hm[1]; p.hLimitSrc = '고도지구'; p.hLimitNote = hx ? '경관 가이드라인 등 완화 시 ' + hx[1] + 'm' : ''; notes.push(hdName + ' → 최고높이 ' + hm[1] + 'm 자동 입력' + (hx ? ' (완화 시 ' + hx[1] + 'm)' : '')); }
+  var aslM = (E ? E.marks : []).map(function (n) { var m = n.match(/해발\s*(\d+(?:\.\d+)?)\s*m/); return m ? { v: +m[1], n: n } : null; }).filter(Boolean).sort(function (a, b) { return a.v - b.v; })[0];
+  if (aslM) { p.aslLimit = String(aslM.v); p.aslSrc = aslM.n.replace(/<[^>]*>/g, ''); notes.push('비행·대공 고도제한 해발 ' + aslM.v + 'm 자동 입력 (지반고+건물+옥탑 합계 기준)'); }
   var dpNames = (E ? E.marks : []).filter(function (n) { return /지구단위계획/.test(n); });
   if (!hm && dpNames.length) notes.push(dpNames.join(', ') + ' → 최고높이는 지구단위계획 결정도서(구역별 높이계획)에만 있고 공개 데이터에 수치가 없음' + (/문의/.test(dpNames.join()) ? ' — 토지이음 표기대로 해당 구청 도시계획과 확인' : '') + '. 확인한 값은 "최고높이 제한" 칸에 입력');
   else if (!hm && !p.heightDistrict && E) notes.push('높이: 고도지구·지구단위계획 등 높이 제한 지역 아님 (토지이음 기준)' + (/전용주거|일반주거/.test(p.zone) ? ' — 정북 일조 이격만 검토' : ''));

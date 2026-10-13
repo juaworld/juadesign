@@ -189,6 +189,8 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
     <label>최고높이 제한 (m)<input data-f="hLimit" inputmode="decimal"><small>기준이 여럿이면 가장 낮은 값</small></label>
     <label>제한 근거<select data-f="hLimitSrc"><option value="">선택</option><option>고도지구</option><option>지구단위계획</option><option>가로구역별 최고높이(건축법 제60조)</option><option>경관지구·경관계획</option><option>국가유산 현상변경 허용기준</option><option>비행안전구역(군사기지법)</option><option>공항 장애물제한표면(공항시설법)</option><option>기타</option></select></label>
     <label>정북방향 인접대지경계선까지 거리 (m)<input data-f="northDist" inputmode="decimal"><small>전용·일반주거지역만 검토</small></label>
+    <label>해발 고도제한 (m)<input data-f="aslLimit" inputmode="decimal"><small>대공방어·비행안전 위탁고도 — 주소 조회 시 자동</small></label>
+    <label>대지 지반고 (해발 m)<input data-f="groundEl" inputmode="decimal"><small>현황측량도 기준</small></label>
   </div></fieldset>
   <fieldset><legend>분리 공작물 (건축물과 따로 설치하는 것만, 없으면 비움)</legend><div class="grid">
     <label>옹벽·담장 최고 높이 (m)<input data-f="stWall" inputmode="decimal"></label>
