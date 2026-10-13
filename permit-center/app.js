@@ -574,7 +574,7 @@ function polyArea(g) { // 경위도(EPSG:4326) 다각형 → 국지 평면 근�
   var ring = function (r) { var a = 0; for (var k = 0; k < r.length - 1; k++) a += (r[k][0] * kx) * (r[k + 1][1] * ky) - (r[k + 1][0] * kx) * (r[k][1] * ky); return Math.abs(a) / 2; };
   return polys.reduce(function (s, pl) { return s + ring(pl[0]) - pl.slice(1).reduce(function (h, r) { return h + ring(r); }, 0); }, 0);
 }
-var VW_LAYERS = [['LT_C_UQ111', 'zone'], ['LT_C_UQ112', 'zone'], ['LT_C_UQ113', 'zone'], ['LT_C_UQ114', 'zone'], ['LT_C_UQ121', '경관지구'], ['LT_C_UPISUQ161', '지구단위계획구역'], ['LT_C_UD801', '개발제한구역']];
+var VW_LAYERS = [['LT_C_UQ111', 'zone'], ['LT_C_UQ112', 'zone'], ['LT_C_UQ113', 'zone'], ['LT_C_UQ114', 'zone'], ['LT_C_UQ121', '경관지구'], ['LT_C_UPISUQ161', '지구단위계획구역'], ['LT_C_UD801', '개발제한구역'], ['LT_C_DAMDAN', '산업단지']];
 function lookupAddress(addr) {
   var out = { addr: addr, uses: [], errs: [] };
   var vwErr = function (j) { return j && j.response && j.response.status === 'ERROR' ? ((j.response.error && (j.response.error.code + ' ' + (j.response.error.text || ''))) || '오류') : ''; };
@@ -586,16 +586,16 @@ function lookupAddress(addr) {
       out.full = it.address && (it.address.parcel || it.address.road); out.pt = it.point;
       var pt = 'POINT(' + it.point.x + ' ' + it.point.y + ')';
       var parcel = vw('/req/data', { service: 'data', request: 'GetFeature', data: 'LP_PA_CBND_BUBUN', geomFilter: pt, crs: 'EPSG:4326', size: 1, page: 1, errorformat: 'json' }).then(function (j) {
-        var f = feats(j)[0]; if (f) { out.pnu = f.properties.pnu; out.parcel = f.properties.addr; out.area = Math.round(polyArea(f.geometry) * 10) / 10; }
+        var f = feats(j)[0]; if (f) { out.pnu = f.properties.pnu; out.parcel = f.properties.addr; out.area = Math.round(polyArea(f.geometry) * 10) / 10; var jm = String(f.properties.jibun || '').match(/([가-힣]+)\s*$/); if (jm) out.jimok = jm[1]; }
       }).catch(function () {});
       var layers = VW_LAYERS.map(function (L) {
         return vw('/req/data', { service: 'data', request: 'GetFeature', data: L[0], geomFilter: pt, crs: 'EPSG:4326', geometry: 'false', size: 10, page: 1, errorformat: 'json' }).then(function (j) {
           var e = vwErr(j); if (e) { out.errs.push(L[0] + ': ' + e); return; }
-          feats(j).forEach(function (f) { var nm = f.properties.uname || f.properties.dgm_nm || L[1]; out.uses.push({ name: L[1] === 'zone' ? nm : L[1] + (nm && nm !== L[1] ? ' (' + nm + ')' : ''), rel: '포함' }); if (L[1] === 'zone') out.zone1 = nm; });
+          feats(j).forEach(function (f) { var pr = f.properties || {}; if (L[1] === 'zone' && !pr.uname) return; var nm = pr.uname || pr.dgm_nm || pr.dan_name || Object.keys(pr).map(function (k) { return pr[k]; }).filter(function (v) { return typeof v === 'string' && /단지$/.test(v); })[0] || L[1]; out.uses.push({ name: L[1] === 'zone' ? nm : L[1] + (nm && nm !== L[1] ? ' (' + nm + ')' : ''), rel: '포함' }); if (L[1] === 'zone') out.zone1 = nm; });
         }).catch(function (e) { out.errs.push(L[0] + ': ' + e.message); });
       });
       return Promise.all([parcel].concat(layers));
-    }).then(function () { return out; });
+    }).then(function () { window.VPC_LASTERR = out.errs; return out; });
 }
 function applyLookup(o) {
   var p = cur().p, names = (o.uses || []).map(function (u) { return nospace(u.name); }), notes = [];
@@ -605,7 +605,11 @@ function applyLookup(o) {
   p.landscapeDistrict = names.some(function (n) { return /경관지구/.test(n); });
   p.districtPlan = names.some(function (n) { return /지구단위계획구역/.test(n); });
   p.greenbelt = names.some(function (n) { return /개발제한구역/.test(n); });
-  notes.push('중점경관관리구역·산업단지·산지 여부는 VWorld에서 제공하지 않아 직접 체크');
+  p.industrialComplex = names.some(function (n) { return /산업단지|농공단지/.test(n); });
+  var JM = { '대': '대', '장': '공장용지', '창': '창고용지', '잡': '잡종지', '전': '전', '답': '답', '과': '과수원', '임': '임야', '목': '목장용지', '차': '주차장', '주': '주유소용지', '학': '학교용지', '종': '종교용지' };
+  if (o.jimok) { p.landCat = JM[o.jimok] || '기타'; notes.push('지목: ' + p.landCat); }
+  if (p.districtPlan) notes.push('지구단위계획구역 포함 → 건폐율·용적률·용도는 해당 지구단위계획 결정도서가 우선');
+  if (p.industrialComplex) notes.push('산업단지 내 필지');
   if (o.area && !p.siteArea) { p.siteArea = String(o.area); notes.push('대지면적(지적도 도형 계산, 공부면적과 소폭 차이 가능): ' + fmt(num(o.area)) + '㎡'); }
   var best = matchRegion(p.address); if (best) { p.region = best; notes.push('지자체: ' + best); }
   if (o.full) notes.unshift('대지: ' + o.full);
