@@ -533,15 +533,54 @@ function applyLookup(o) {
   p.greenbelt = names.some(function (n) { return /개발제한구역/.test(n); });
   notes.push('중점경관관리구역·산업단지·산지 여부는 VWorld에서 제공하지 않아 직접 체크');
   if (o.area && !p.siteArea) { p.siteArea = String(o.area); notes.push('대지면적(지적도 도형 계산, 공부면적과 소폭 차이 가능): ' + fmt(num(o.area)) + '㎡'); }
-  var a = nospace(p.address).replace(/^강원도/, '강원특별자치도').replace(/^전라북도/, '전북특별자치도').replace(/^(전라남도|광주광역시)/, '전남광주통합특별시');
-  if (D.regions) {
-    var best = '', keys = Object.keys(D.regions.regions);
-    keys.forEach(function (k) { var kk = nospace(k); if (a.indexOf(kk) === 0 && kk.length > best.length) best = k; });
-    if (!best) keys.forEach(function (k) { var R = D.regions.regions[k]; if (R.sgg && a.indexOf(nospace(R.sgg)) >= 0 && a.indexOf(nospace(R.sido)) === 0 && k.length > best.length) best = k; });
-    if (best) { p.region = best; notes.push('지자체: ' + best); }
-  }
+  var best = matchRegion(p.address); if (best) { p.region = best; notes.push('지자체: ' + best); }
+  if (o.full) notes.unshift('대지: ' + o.full);
   save(); ensureDetail(p); renderAll();
   return notes;
+}
+var SIDO_FULL = { '서울': '서울특별시', '부산': '부산광역시', '대구': '대구광역시', '인천': '인천광역시', '광주': '광주광역시', '대전': '대전광역시', '울산': '울산광역시', '세종': '세종특별자치시', '세종시': '세종특별자치시', '경기': '경기도', '강원': '강원특별자치도', '충북': '충청북도', '충남': '충청남도', '전북': '전북특별자치도', '전남': '전라남도', '경북': '경상북도', '경남': '경상남도', '제주': '제주특별자치도' };
+function fullAddr(a) { a = String(a || '').trim(); var m = /^(\S+)\s/.exec(a); return m && SIDO_FULL[m[1]] ? SIDO_FULL[m[1]] + a.slice(m[1].length) : a; }
+function matchRegion(addr) {
+  var a = nospace(fullAddr(addr)).replace(/^강원도/, '강원특별자치도').replace(/^전라북도/, '전북특별자치도').replace(/^(전라남도|광주광역시)/, '전남광주통합특별시');
+  if (!D.regions) return '';
+  var best = '', keys = Object.keys(D.regions.regions);
+  keys.forEach(function (k) { var kk = nospace(k); if (a.indexOf(kk) === 0 && kk.length > best.length) best = k; });
+  if (!best) keys.forEach(function (k) { var R = D.regions.regions[k]; if (R.sgg && a.indexOf(nospace(R.sgg)) >= 0 && a.indexOf(nospace(R.sido)) === 0 && k.length > best.length) best = k; });
+  return best;
+}
+var EUM = ' <a href="https://www.eum.go.kr/web/am/amMain.jsp" target="_blank" rel="noopener">토지이음에서 용도지역 확인</a>';
+function hasVwKey() { return !!(lsGet(KEYSTORE) || (window.VPC_SETTINGS && VPC_SETTINGS.vworldKey)); }
+function runLookup(a, alt) {
+  $('#addrMsg').textContent = '조회 중…';
+  return lookupAddress(a).catch(function (e) { if (alt && !/키/.test(e.message)) return lookupAddress(alt); throw e; })
+    .then(function (o) { var notes = applyLookup(o); $('#addrMsg').innerHTML = esc('반영: ' + notes.join(' · ')) + (/미검출/.test(notes.join()) ? EUM : ''); })
+    .catch(function (err) {
+      var p = cur().p, r = matchRegion(a), extra = '';
+      if (r) { p.address = fullAddr(a); p.region = r; save(); ensureDetail(p); renderAll(); extra = ' (지자체 ' + r + '는 주소로 반영함)'; }
+      $('#addrMsg').innerHTML = esc(err.message + extra + ' — 용도지역은 아래에서 직접 선택하세요.') + EUM;
+    });
+}
+function loadScript(src) { return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = function () { rej(new Error('주소검색 서비스를 불러오지 못했습니다(인터넷 연결 확인)')); }; document.head.appendChild(s); }); }
+function openPostcode() {
+  var ready = window.daum && daum.Postcode ? Promise.resolve() : loadScript('https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js');
+  ready.then(function () {
+    var ov = document.createElement('div'); ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px';
+    var box = document.createElement('div'); box.style.cssText = 'background:#fff;color:#222;width:min(540px,100%);height:min(600px,90vh);border-radius:10px;overflow:hidden;display:flex;flex-direction:column';
+    var hd = document.createElement('div'); hd.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #ddd;font-weight:600';
+    hd.innerHTML = '<span>주소 검색 · 대지를 골라 클릭</span>';
+    var x = document.createElement('button'); x.type = 'button'; x.textContent = '닫기'; x.style.cssText = 'background:#f3f3f3;color:#222'; x.onclick = function () { ov.remove(); }; hd.appendChild(x);
+    var body = document.createElement('div'); body.style.cssText = 'flex:1;min-height:0';
+    box.appendChild(hd); box.appendChild(body); ov.appendChild(box); document.body.appendChild(ov);
+    ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+    new daum.Postcode({ width: '100%', height: '100%', oncomplete: function (d) { ov.remove(); pickAddress(d); } }).embed(body, { q: $('#addrIn').value.trim(), autoClose: false });
+  }).catch(function (e) { toast(e.message); });
+}
+function pickAddress(d) {
+  var jibun = fullAddr(d.jibunAddress || d.autoJibunAddress || ''), road = fullAddr(d.roadAddress || d.autoRoadAddress || '');
+  var a = jibun || road; $('#addrIn').value = a;
+  if (hasVwKey()) return runLookup(a, road && road !== a ? road : '');
+  var p = cur().p, r = matchRegion(a); p.address = a; if (r) p.region = r; save(); ensureDetail(p); renderAll();
+  $('#addrMsg').innerHTML = esc('반영: 대지 ' + a + (r ? ' · 지자체: ' + r : ' · 지자체 자동매칭 실패(직접 선택)') + ' · 용도지역은 VWorld 키 등록 전이라 자동조회 불가 → 아래에서 선택') + EUM;
 }
 
 /* ---------- 렌더링 ---------- */
@@ -740,10 +779,10 @@ document.addEventListener('DOMContentLoaded', function () {
   $('#addrBtn').addEventListener('click', function () {
     var a = $('#addrIn').value.trim(); if (!a) { toast('주소를 입력하세요'); return; }
     $('#addrMsg').textContent = '조회 중…';
-    var eum = ' <a href="https://www.eum.go.kr/web/am/amMain.jsp" target="_blank" rel="noopener">토지이음에서 용도지역 확인</a>';
-    lookupAddress(a).then(function (o) { var notes = applyLookup(o); $('#addrMsg').innerHTML = esc('반영: ' + notes.join(' · ')) + (/미검출/.test(notes.join()) ? eum : ''); })
-      .catch(function (err) { $('#addrMsg').innerHTML = esc(err.message + ' — 아래에서 지자체·용도지역을 직접 선택하세요.') + eum; });
+    runLookup(a);
   });
+  (function () { var b = document.createElement('button'); b.type = 'button'; b.id = 'addrSearch'; b.textContent = '주소 검색'; b.title = '주소를 검색해 대지를 고릅니다'; b.addEventListener('click', openPostcode); var ab = $('#addrBtn'); ab.parentNode.insertBefore(b, ab); ab.textContent = '입력 주소로 조회'; ab.className = ''; b.className = 'primary';
+    $('#addrIn').placeholder = '[주소 검색]으로 대지를 고르거나, 지번·도로명 주소를 직접 입력'; })();
   $('#addrIn').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('#addrBtn').click(); });
 
   $('#prjSel').addEventListener('change', function (e) { state.cur = e.target.value; save(); ensureDetail(cur().p); renderAll(); });
