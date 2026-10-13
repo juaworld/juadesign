@@ -63,6 +63,8 @@ function render() {
     var v = ov.park && ov.park[u] != null ? ov.park[u] : '', a = raw && raw.park ? raw.park[u] : null;
     return '<tr' + (u === p.use ? ' class="hl"' : '') + '><td>' + u + '</td><td class="sub">' + (a === 'national' ? '시행령' : a ? a + '㎡' : '-') + '</td><td><input data-ov="park" data-k="' + u + '" value="' + esc(v) + '" inputmode="decimal" placeholder="자동"></td></tr>';
   }).join('');
+  var hts = ov.heights || {}, hk = Object.keys(hts); if (p.hdKey && hk.indexOf(p.hdKey) < 0) hk.unshift(p.hdKey); if (hk.indexOf('*') < 0) hk.push('*');
+  var heightRows = hk.map(function (k) { return '<tr' + (k === p.hdKey ? ' class="hl"' : '') + '><td>' + (k === '*' ? '이 지자체 대표값 <span class="sub">(고시 구분 없이 적용)</span>' : '고시 ' + esc(k) + (k === p.hdKey ? ' <span class="sub">현재 프로젝트</span>' : '')) + '</td><td><input data-ov="heights" data-k="' + esc(k) + '" value="' + esc(hts[k] != null ? hts[k] : '') + '" inputmode="decimal" placeholder="m"></td></tr>'; }).join('');
   var nOv = Object.keys(draft.overrides).filter(function (k) { var o = draft.overrides[k]; return o && (Object.keys(o.bcr || {}).length || Object.keys(o.far || {}).length || Object.keys(o.park || {}).length || o.disabledPct != null || (o.scapeTiers || []).length); }).length;
   d.innerHTML = '<h3>관리자 설정 <small class="hint">공용 설정 v' + (S.v || 0) + ' · 보정된 지자체 ' + nOv + '곳</small></h3>' +
     '<section class="adm-sec"><h4>VWorld API 키 (전 직원 공용)</h4><input id="admKey" type="password" autocomplete="off" style="width:100%" value="' + esc(draft.vworldKey) + '" placeholder="vworld.kr 인증키 — 서비스 URL에 juaworld.github.io 등록 필요">' +
@@ -73,7 +75,8 @@ function render() {
       '<details open><summary>건폐율·용적률 (%)</summary><table class="ntab"><thead><tr><th>용도지역</th><th>자동값 건폐/용적</th><th>건폐율</th><th>용적률</th></tr></thead><tbody>' + zoneRows + '</tbody></table></details>' +
       '<details><summary>부설주차 기준 (시설면적 ㎡당 1대)</summary><table class="ntab"><thead><tr><th>용도</th><th>자동값</th><th>보정</th></tr></thead><tbody>' + parkRows + '</tbody></table></details>' +
       '<div class="grid" style="margin-top:10px"><label>장애인전용주차 비율 (%)<input data-ovs="disabledPct" value="' + esc(ov.disabledPct != null ? ov.disabledPct : '') + '" placeholder="' + esc(raw && raw.disabledPct != null ? raw.disabledPct : '조례 미확인') + '"></label>' +
-      '<label>조경 비율 일괄 (%)<input data-ovs="scapeRate" value="' + esc(ov.scapeTiers && ov.scapeTiers[0] ? ov.scapeTiers[0].rate : '') + '" placeholder="자동(연면적 구간별)"></label></div>' : '<p class="hint">① 프로젝트에서 지자체를 먼저 선택하세요.</p>') + '</section>' +
+      '<label>조경 비율 일괄 (%)<input data-ovs="scapeRate" value="' + esc(ov.scapeTiers && ov.scapeTiers[0] ? ov.scapeTiers[0].rate : '') + '" placeholder="자동(연면적 구간별)"></label></div>' +
+      '<details' + (p.heightDistrict ? ' open' : '') + '><summary>고도지구 최고높이 (m)</summary><p class="hint">VWorld 고도지구 데이터에는 높이가 없어 한 번 등록해 두면, 이후 같은 고시의 고도지구 필지는 주소 조회 때 자동 입력됩니다. 값은 토지이음 → 필지 열람 → 층수·높이제한 또는 결정고시문에서 확인. 같은 고시 안에서 구역별 높이가 다르면 가장 낮은 값을 등록하세요.</p><table class="ntab"><thead><tr><th>구분</th><th>높이</th></tr></thead><tbody>' + heightRows + '</tbody></table></details>' : '<p class="hint">① 프로젝트에서 지자체를 먼저 선택하세요.</p>') + '</section>' +
     '<section class="adm-sec"><h4>관리자 비밀번호 변경</h4><input id="admNewPw" type="password" style="width:100%" placeholder="새 비밀번호 (비우면 유지)"></section>' +
     '<p id="admMsg" class="hint"></p>' +
     '<p class="adm-btns"><button data-a="logout" class="ghost">잠그기</button> <button data-a="close">닫기</button> <button data-a="local">이 브라우저에만 적용</button> <button class="primary" data-a="publish">전체 직원에게 적용</button></p>' +

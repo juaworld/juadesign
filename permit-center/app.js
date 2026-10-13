@@ -423,7 +423,7 @@ function numericChecks(prj) {
   var H = num(p.height), hFlags = [];
   if (p.heightDistrict) hFlags.push('고도지구'); if (p.districtPlan) hFlags.push('지구단위계획'); if (p.landscapeDistrict) hFlags.push('경관지구'); if (p.heritageZone) hFlags.push('국가유산 주변'); if (p.flightZone) hFlags.push('비행안전구역·공항');
   if (num(p.hLimit) > 0) out.push({ rid: 'permit', label: '최고높이', val: H ? fmt(H) + 'm' : '미입력', lim: fmt(num(p.hLimit)) + 'm 이하 (' + (p.hLimitSrc || '직접 입력') + ')', ok: H ? H <= num(p.hLimit) : null, note: H && H <= num(p.hLimit) && num(p.hLimit) - H < 1 ? '여유 1m 미만 — 옥탑·파라펫·설비 높이 포함 여부 재확인' : '' });
-  else if (hFlags.length) out.push({ rid: 'permit', label: '최고높이', val: H ? fmt(H) + 'm' : '미입력', lim: hFlags.join('·') + ' 높이 기준 입력 필요', ok: null, note: '고도지구·지구단위계획: 토지이음 도시계획 결정도 / 국가유산: 국가유산청 현상변경 허용기준 / 비행안전구역: 관할 부대 협의 / 공항: 장애물제한표면' });
+  else if (hFlags.length) out.push({ rid: 'permit', label: '최고높이', val: H ? fmt(H) + 'm' : '미입력', lim: hFlags.join('·') + ' 높이 기준 입력 필요', ok: null, note: (p.pnu ? '주소란 아래 "토지이음에서 이 필지 열람" → 층수·높이제한 탭. ' : '') + '고도지구·지구단위계획: 토지이음 도시계획 결정도 / 국가유산: 국가유산청 현상변경 허용기준 / 비행안전구역: 관할 부대 협의 / 공항: 장애물제한표면' });
   if (/전용주거|일반주거/.test(p.zone) && H > 0) { var nNeed = H <= 10 ? 1.5 : H / 2, nHas = p.northDist !== '' && p.northDist != null; out.push({ rid: 'permit', label: '정북방향 일조 이격', val: nHas ? fmt(num(p.northDist)) + 'm' : '미입력', lim: fmt(nNeed, 2) + 'm 이상 (높이 ' + fmt(H) + 'm: 10m 이하 부분 1.5m, 초과 부분은 높이의 1/2 — 건축법 시행령 제86조)', ok: nHas ? num(p.northDist) >= nNeed : null, note: '최고 높이 부분 기준. 정북 방향이 도로·공원·하천 등에 접하면 완화 (제86조제3항)' }); }
   if (app.energy.lvl === 'req') {
     var auto = prj.files.map(function (f) { return f.epi; }).filter(Boolean);
@@ -596,7 +596,7 @@ function lookupAddress(addr) {
       var layers = VW_LAYERS.map(function (L) {
         return vw('/req/data', { service: 'data', request: 'GetFeature', data: L[0], geomFilter: pt, crs: 'EPSG:4326', geometry: 'false', size: 10, page: 1, errorformat: 'json' }).then(function (j) {
           var e = vwErr(j); if (e) { out.errs.push(L[0] + ': ' + e); return; }
-          feats(j).forEach(function (f) { var pr = f.properties || {}; if (L[1] === 'zone' && !pr.uname) return; if (L[1] === '*') { var own = pr.uname || pr.dgm_nm || Object.keys(pr).map(function (k) { return pr[k]; }).filter(function (v) { return typeof v === 'string' && /(지구|구역)$/.test(v); })[0]; if (own && !out.uses.some(function (u) { return u.name === own; })) out.uses.push({ name: own, rel: '포함' }); return; } var nm = pr.uname || pr.dgm_nm || pr.dan_name || Object.keys(pr).map(function (k) { return pr[k]; }).filter(function (v) { return typeof v === 'string' && /단지$/.test(v); })[0] || L[1]; out.uses.push({ name: L[1] === 'zone' ? nm : L[1] + (nm && nm !== L[1] ? ' (' + nm + ')' : ''), rel: '포함' }); if (L[1] === 'zone') out.zone1 = nm; });
+          feats(j).forEach(function (f) { var pr = f.properties || {}; if (L[1] === 'zone' && !pr.uname) return; if (L[1] === '*') { var own = pr.uname || pr.dgm_nm || Object.keys(pr).map(function (k) { return pr[k]; }).filter(function (v) { return typeof v === 'string' && /(지구|구역)$/.test(v); })[0]; if (own && !out.uses.some(function (u) { return u.name === own; })) out.uses.push({ name: own, rel: '포함' }); if (own && /고도지구/.test(own)) out.hd = (pr.dyear || '') + '-' + (pr.dnum || ''); return; } var nm = pr.uname || pr.dgm_nm || pr.dan_name || Object.keys(pr).map(function (k) { return pr[k]; }).filter(function (v) { return typeof v === 'string' && /단지$/.test(v); })[0] || L[1]; out.uses.push({ name: L[1] === 'zone' ? nm : L[1] + (nm && nm !== L[1] ? ' (' + nm + ')' : ''), rel: '포함' }); if (L[1] === 'zone') out.zone1 = nm; });
         }).catch(function (e) { out.errs.push(L[0] + ': ' + e.message); });
       });
       return Promise.all([parcel].concat(layers));
@@ -616,18 +616,26 @@ function applyLookup(o) {
   if (p.districtPlan) notes.push('지구단위계획구역 포함 → 건폐율·용적률·용도는 해당 지구단위계획 결정도서가 우선');
   if (p.industrialComplex) notes.push('산업단지 내 필지');
   p.heightDistrict = names.some(function (n) { return /고도지구/.test(n); });
-  if (p.heightDistrict) notes.push('고도지구 → 높이 제한 칸에 결정 높이 입력');
+  p.hdKey = p.heightDistrict && o.hd ? o.hd : '';
   if (names.some(function (n) { return /국가유산|문화재|역사문화환경/.test(n); })) p.heritageZone = true;
   if (names.some(function (n) { return /비행안전|비행장|공항/.test(n); })) p.flightZone = true;
   var exz = names.filter(function (n) { return /자연취락지구|개발진흥지구|기반시설부담구역|준산업단지|공장입지유도지구/.test(n); });
   if (exz.length) { p.devCmteEx = '예'; notes.push(exz[0] + ' → 개발행위 도시계획위원회 심의 예외 해당'); }
   if (o.area && !p.siteArea) { p.siteArea = String(o.area); notes.push('대지면적(지적도 도형 계산, 공부면적과 소폭 차이 가능): ' + fmt(num(o.area)) + '㎡'); }
   var best = matchRegion(p.address); if (best) { p.region = best; notes.push('지자체: ' + best); }
+  if (p.heightDistrict) { var hv = autoHeight(p); if (hv) { p.hLimit = String(hv.h); p.hLimitSrc = '고도지구'; notes.push('고도지구 최고높이 ' + hv.h + 'm 자동 입력 (' + hv.src + ')'); } else notes.push('고도지구' + (p.hdKey ? '(고시 ' + p.hdKey + ')' : '') + ' 높이는 공개 데이터에 없음 → 토지이음 열람 후 관리자 화면 "고도지구 최고높이"에 한 번 등록하면 같은 고도지구는 이후 자동 입력'); }
   if (o.full) notes.unshift('대지: ' + o.full);
   save(); ensureDetail(p); renderAll();
   return notes;
 }
 var SIDO_FULL = { '서울': '서울특별시', '부산': '부산광역시', '대구': '대구광역시', '인천': '인천광역시', '광주': '광주광역시', '대전': '대전광역시', '울산': '울산광역시', '세종': '세종특별자치시', '세종시': '세종특별자치시', '경기': '경기도', '강원': '강원특별자치도', '충북': '충청북도', '충남': '충청남도', '전북': '전북특별자치도', '전남': '전라남도', '경북': '경상북도', '경남': '경상남도', '제주': '제주특별자치도' };
+function autoHeight(p) {
+  var o = window.VPC_SETTINGS && VPC_SETTINGS.overrides ? VPC_SETTINGS.overrides[p.region] : null, H = o && o.heights;
+  if (!H) return null;
+  if (p.hdKey && H[p.hdKey] != null) return { h: H[p.hdKey], src: '관리자 등록값 · 고시 ' + p.hdKey };
+  if (H['*'] != null) return { h: H['*'], src: '관리자 등록값 · ' + p.region + ' 대표값' };
+  return null;
+}
 function fullAddr(a) { a = String(a || '').trim(); var m = /^(\S+)\s/.exec(a); return m && SIDO_FULL[m[1]] ? SIDO_FULL[m[1]] + a.slice(m[1].length) : a; }
 function matchRegion(addr) {
   var a = nospace(fullAddr(addr)).replace(/^강원도/, '강원특별자치도').replace(/^전라북도/, '전북특별자치도').replace(/^(전라남도|광주광역시)/, '전남광주통합특별시');
@@ -695,7 +703,7 @@ function bindForm() {
   $$('[data-f]').forEach(function (el) { var k = el.dataset.f; if (el.type === 'checkbox') el.checked = !!p[k]; else el.value = p[k] == null ? '' : p[k]; });
   $$('[data-bf]').forEach(function (el) { el.value = p.bf && p.bf[el.dataset.bf] != null ? p.bf[el.dataset.bf] : ''; });
   $('#nbWrap').hidden = !/근린생활/.test(p.use); $('#roomWrap').hidden = p.use !== '숙박시설'; $('#empWrap').hidden = p.use !== '공장';
-  $('#landUses').innerHTML = p.landUses && p.landUses.length ? '<b>토지이용계획</b> ' + p.landUses.map(function (u) { return '<span class="chip">' + esc(u) + '</span>'; }).join(' ') + (p.pnu ? ' <small>PNU ' + esc(p.pnu) + '</small>' : '') : '';
+  $('#landUses').innerHTML = p.landUses && p.landUses.length ? '<b>토지이용계획</b> ' + p.landUses.map(function (u) { return '<span class="chip">' + esc(u) + '</span>'; }).join(' ') + (p.pnu ? ' <small>PNU ' + esc(p.pnu) + '</small> <a target="_blank" rel="noopener" href="https://www.eum.go.kr/web/ar/lu/luLandDet.jsp?pnu=' + encodeURIComponent(p.pnu) + '&mode=search&isNoScr=script&selGbn=umd">토지이음에서 이 필지 열람 (층수·높이제한 포함)</a>' : '') : '';
   renderRegionSel();
 }
 function askControl(q) {
