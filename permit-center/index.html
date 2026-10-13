@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>가상인허가센터</title>
+<meta name="robots" content="noindex">
+<style>
+:root{--bg:#f5f4f0;--surface:#fff;--surface2:#faf9f6;--ink:#1d1f22;--ink2:#5b6068;--line:#e3e1db;--accent:#1f5f8b;--accent-ink:#fff;
+--good:#1e7a46;--good-bg:#e5f3ea;--warn:#9a6200;--warn-bg:#fbf0d9;--bad:#b3261e;--bad-bg:#fbe6e4;--cond:#6a4fb0;--cond-bg:#eeeafa;--no:#7a7f87;--no-bg:#eeeeec;--hl:#fff7d6;--r:10px}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#16181b;--surface:#1f2226;--surface2:#24282d;--ink:#eceae4;--ink2:#a3a8b0;--line:#33373d;--accent:#6fb0dd;--accent-ink:#0e1a24;
+--good:#6fd39a;--good-bg:#1d3326;--warn:#f0c065;--warn-bg:#3a2f17;--bad:#ff8a80;--bad-bg:#3d1f1d;--cond:#b9a5f5;--cond-bg:#2b2540;--no:#9aa0a8;--no-bg:#2a2d31;--hl:#3a3420}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 "Pretendard","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;word-break:keep-all}
+header.top{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.wrap{max-width:1200px;margin:0 auto;padding:0 16px}
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 0}
+.brand{display:flex;align-items:center;gap:10px;margin-right:auto}
+.mk{width:30px;height:30px;border-radius:8px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:800}
+.brand h1{font-size:17px;margin:0}.brand small{color:var(--ink2);font-size:12px;display:block;line-height:1.3}
+.prj{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+select,input,textarea,button{font:inherit;color:inherit}
+select,input{background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:7px 9px;min-width:0}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button{background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:7px 11px;cursor:pointer;white-space:nowrap}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button.ghost{background:transparent}
+.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+.tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:10px 12px;color:var(--ink2)}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent);font-weight:700}
+main{padding:20px 0 60px}
+.panel>h2{font-size:20px;margin:0 0 4px}.lead{color:var(--ink2);margin:0 0 16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;margin-bottom:14px}
+.card h3{font-size:16px;margin:0 0 6px}.card h4{font-size:14px;margin:12px 0 6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px 14px}
+fieldset{border:1px solid var(--line);border-radius:var(--r);padding:14px 16px 16px;margin:0 0 14px;background:var(--surface)}
+legend{font-weight:700;padding:0 6px}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--ink2)}
+label input,label select{color:var(--ink);font-size:14px}
+label small{font-size:11.5px;opacity:.9}
+label.ck{flex-direction:row;align-items:center;gap:8px;color:var(--ink)}
+label.ck input{width:17px;height:17px}
+.addr{display:flex;gap:8px;flex-wrap:wrap}.addr input{flex:1 1 320px}
+#addrMsg,#regionHint{font-size:13px;color:var(--ink2);margin:8px 0 0}
+#landUses{margin-top:8px;font-size:13px;line-height:2}
+.hint{color:var(--ink2);font-size:13px}
+.pill{display:inline-block;font-size:12px;font-weight:700;padding:2px 9px;border-radius:99px;white-space:nowrap}
+.pill.req{background:var(--warn-bg);color:var(--warn)}.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.pill.cond{background:var(--cond-bg);color:var(--cond)}.pill.no{background:var(--no-bg);color:var(--no)}
+.pill.good{background:var(--good-bg);color:var(--good)}.pill.warn{background:var(--warn-bg);color:var(--warn)}
+#appList{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.app{margin:0}.app header{display:flex;flex-direction:column;gap:6px;align-items:flex-start;margin-bottom:6px}
+.app ul{margin:6px 0;padding-left:18px}.app li{margin:3px 0}
+.app.no{opacity:.75}.app.req{border-left:4px solid var(--warn)}.app.cond{border-left:4px solid var(--cond)}
+.law{font-size:12px;color:var(--ink2);margin:8px 0 4px}
+.ask{background:var(--cond-bg);border-radius:8px;padding:10px 12px;margin:8px 0}.ask p{margin:0 0 6px;color:var(--ink);font-size:13.5px;font-weight:600}
+details summary{cursor:pointer;font-size:13px;color:var(--accent);margin-top:4px}
+.raw{white-space:pre-wrap;font-size:12.5px;color:var(--ink2);background:var(--surface2);border-radius:6px;padding:8px 10px;max-height:320px;overflow:auto}
+#drop{border:2px dashed var(--line);border-radius:var(--r);padding:28px 16px;text-align:center;background:var(--surface);cursor:pointer}
+#drop.over,#drop:hover{border-color:var(--accent)}
+.frow{display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+.fmeta{min-width:200px;flex:1 1 260px}.fmeta b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fmeta small{color:var(--ink2)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;flex:2 1 360px}
+.chip{background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:12.5px;display:inline-flex;align-items:center;gap:4px}
+.chip.warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+.chip button{border:0;background:none;padding:0 4px;color:var(--ink2)}
+.addDoc{font-size:12.5px;padding:4px 6px;max-width:170px}
+.empty{color:var(--ink2);text-align:center;padding:20px}
+#checklist{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:14px;margin-top:16px}
+.cl{margin:0}.cl header{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}.cl header h3{margin:0 auto 0 0}
+.score{font-size:12.5px;font-weight:700}.score.good{color:var(--good)}.score.warn{color:var(--warn)}.score.bad{color:var(--bad)}.score.cond{color:var(--cond)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+td,th{padding:6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+tr.hl td{background:var(--hl)}
+td.st{width:22px;font-weight:800;text-align:center}tr.ok td.st{color:var(--good)}tr.miss td.st{color:var(--bad)}tr.na{opacity:.5}
+td.man select{font-size:12px;padding:3px 4px}
+.reqtag{font-size:11px;color:var(--bad);font-weight:700}.opt{font-size:11px;color:var(--ink2)}
+.fsrc{font-size:11.5px;color:var(--good)}
+.content ul{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;font-size:13px}
+.content li.ok{color:var(--good)}.content li.miss{color:var(--bad)}
+.ntab th{font-size:12.5px;color:var(--ink2);background:var(--surface2)}
+.sub{font-size:11.5px;color:var(--ink2);margin-top:2px}
+.hero{display:flex;gap:20px;align-items:center;justify-content:space-between;border-left:6px solid var(--warn)}
+.hero.good{border-left-color:var(--good)}.hero.bad{border-left-color:var(--bad)}
+.hero h2{margin:4px 0;font-size:22px}.hero small{color:var(--ink2)}
+.overall{font-weight:700;margin:4px 0 0}.hero.good .overall{color:var(--good)}.hero.warn .overall{color:var(--warn)}.hero.bad .overall{color:var(--bad)}
+.gauge{--v:0;width:96px;height:96px;border-radius:50%;flex:none;display:grid;place-items:center;align-content:center;background:radial-gradient(closest-side,var(--surface) 76%,transparent 77%),conic-gradient(var(--accent) calc(var(--v)*1%),var(--line) 0)}
+.gauge b{font-size:26px;line-height:1}.gauge span{font-size:11px;color:var(--ink2)}
+ol.next{margin:6px 0;padding-left:22px}ol.next li{margin:4px 0}
+.phase h4{color:var(--accent)}.phase ul{margin:0;padding-left:18px}
+.tag{font-size:11px;background:var(--surface2);border:1px solid var(--line);border-radius:4px;padding:0 5px;margin-right:6px;color:var(--ink2)}
+.disc{font-size:12px;color:var(--ink2);border-top:1px solid var(--line);padding-top:10px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+#promptOut{width:100%;height:180px;border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:10px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.warn{color:var(--warn)}.okc{color:var(--good)}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);max-width:min(520px,calc(100% - 32px))}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;opacity:0;pointer-events:none;transition:.2s;max-width:calc(100% - 32px)}
+#toast.on{opacity:1;transform:translateX(-50%)}
+@media (max-width:640px){#checklist,#appList{grid-template-columns:1fr}.content ul,.two{grid-template-columns:1fr}.hero{flex-direction:column;align-items:flex-start}}
+@media print{header.top,.actions,#toast{display:none!important}body{background:#fff;color:#000}.panel{display:none!important}.panel[data-tab="report"]{display:block!important}.card{break-inside:avoid}}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <div class="bar">
+    <div class="brand"><div class="mk">인</div><div><h1>가상인허가센터</h1><small>국가법령·전국 지자체 조례 자동 동기화 · 최종 <span id="syncDate">-</span></small></div></div>
+    <div class="prj">
+      <select id="prjSel" aria-label="프로젝트"></select>
+      <button id="prjNew">+ 새 프로젝트</button><button id="prjDup">복제</button><button id="prjDel" class="ghost">삭제</button>
+      <button id="exp" class="ghost">백업</button><button id="imp" class="ghost">불러오기</button><input type="file" id="impIn" accept=".json" hidden>
+      <button id="keyBtn" class="ghost">설정</button>
+    </div>
+  </div>
+  <nav class="tabs">
+    <button data-tab="info">① 프로젝트</button><button data-tab="app">② 대상 판정</button><button data-tab="docs">③ 서류 올리기</button>
+    <button data-tab="nums">④ 수치 검토</button><button data-tab="report">⑤ 종합·로드맵</button><button data-tab="local">지자체 조례</button><button data-tab="meta">법령 업데이트</button>
+  </nav>
+</div></header>
+
+<main class="wrap">
+<section class="panel" data-tab="info">
+  <h2>프로젝트 정보</h2>
+  <p class="lead">주소를 조회하면 용도지역·지역지구·대지면적·지자체가 자동으로 들어가고, 지자체 조례 기준이 한꺼번에 적용됩니다.</p>
+  <fieldset><legend>주소로 자동 세팅</legend>
+    <div class="addr"><input id="addrIn" placeholder="지번 또는 도로명 주소 (예: 화성시 남양읍 남양리 1234)"><button class="primary" id="addrBtn">조회</button></div>
+    <p id="addrMsg">VWorld API 키가 필요합니다(상단 "설정"). 키 없이도 아래에서 지자체·용도지역을 직접 고를 수 있습니다.</p>
+    <div id="landUses"></div>
+  </fieldset>
+  <fieldset><legend>기본</legend><div class="grid">
+    <label>프로젝트명<input data-f="name"></label>
+    <label>시·도<select id="sidoSel"></select></label>
+    <label>시·군·구<select id="sggSel"></select></label>
+    <label>용도지역<select data-f="zone" id="zoneSel"></select></label>
+    <label>주용도<select data-f="use" id="useSel"></select></label>
+    <label id="nbWrap">근생 세부용도<select data-f="nbSub" id="nbSel"></select></label>
+    <label id="empWrap">사업주 상시근로자 50명 이상<select data-f="emp50"><option value="">선택</option><option>예</option><option>아니오</option></select><small>장애인고용의무 → 공장 편의시설 대상 여부</small></label>
+    <label id="roomWrap">객실 수<input data-f="rooms" inputmode="numeric"></label>
+    <label>건축주<select data-f="owner"><option>민간</option><option>공공</option><option>공공기관</option></select><small>공공 = 국가·지자체</small></label>
+    <label>공사 종류<select data-f="work"><option>신축</option><option>증축</option><option>개축</option><option>재축</option><option>대수선</option><option>용도변경</option></select></label>
+  </div><p id="regionHint"></p></fieldset>
+  <fieldset><legend>규모</legend><div class="grid">
+    <label>대지면적 (㎡)<input data-f="siteArea" inputmode="decimal"></label>
+    <label>건축면적 (㎡)<input data-f="bldgArea" inputmode="decimal"></label>
+    <label>연면적 합계 (㎡)<input data-f="gfa" inputmode="decimal"><small>증축이면 증축 후 전체</small></label>
+    <label>용적률 산정용 연면적 (㎡)<input data-f="gfaFar" inputmode="decimal"><small>지하층·부속 주차장 제외</small></label>
+    <label>증축·변경 부분 (㎡)<input data-f="addArea" inputmode="decimal"></label>
+    <label>지상 층수<input data-f="floorsAbove" inputmode="numeric"></label>
+    <label>지하 층수<input data-f="floorsBelow" inputmode="numeric"></label>
+    <label>최고 높이 (m)<input data-f="height" inputmode="decimal"></label>
+    <label>처마 높이 (m)<input data-f="eaves" inputmode="decimal"></label>
+    <label>최대 기둥 간 거리 (m)<input data-f="span" inputmode="decimal"></label>
+    <label>최대 굴착깊이 (m)<input data-f="excavation" inputmode="decimal"></label>
+    <label>세대수 (공동주택)<input data-f="households" inputmode="numeric"></label>
+  </div></fieldset>
+  <fieldset><legend>입지·조건 (주소 조회 시 자동)</legend><div class="grid">
+    <label>냉·난방 설비<select data-f="hvac"><option>있음</option><option>없음</option></select><small>사무실 일부만 있어도 "있음"</small></label>
+    <label>산지 포함<select data-f="mountain"><option>없음</option><option>공익용산지</option><option>그 외 산지</option></select></label>
+    <label>교통 구분<select data-f="trafficZone"><option value="">자동(시·구 정비지역 / 군 교통권역)</option><option>도시교통정비지역</option><option>교통권역</option></select></label>
+    <label class="ck"><input type="checkbox" data-f="landscapeDistrict">경관지구</label>
+    <label class="ck"><input type="checkbox" data-f="keyLandscapeArea">중점경관관리구역</label>
+    <label class="ck"><input type="checkbox" data-f="districtPlan">지구단위계획구역</label>
+    <label class="ck"><input type="checkbox" data-f="industrialComplex">산업단지·농공단지</label>
+    <label class="ck"><input type="checkbox" data-f="greenbelt">개발제한구역</label>
+    <label class="ck"><input type="checkbox" data-f="separateAdd">별동 증축</label>
+    <label class="ck"><input type="checkbox" data-f="cantilever">캔틸레버 3m 이상 돌출</label>
+    <label class="ck"><input type="checkbox" data-f="flatSlab">무량판 구조</label>
+    <label class="ck"><input type="checkbox" data-f="parkingFloor">주차 용도 층·기계식 주차</label>
+    <label class="ck"><input type="checkbox" data-f="combustible750">특수가연물 750배 이상</label>
+  </div></fieldset>
+  <fieldset><legend>계획 수치</legend><div class="grid">
+    <label>계획 주차대수<input data-f="parkingPlan" inputmode="numeric"></label>
+    <label>계획 장애인 주차대수<input data-f="disabledParkingPlan" inputmode="numeric"></label>
+    <label>계획 조경면적 (㎡)<input data-f="landscapePlan" inputmode="decimal"></label>
+    <label>EPI 평점 합계<input data-f="epi" inputmode="decimal"><small>비우면 올린 파일에서 인식</small></label>
+    <label>건폐율 직접 지정 (%)<input data-f="bcrLimit" inputmode="decimal"><small>지구단위계획 등 별도 기준일 때만</small></label>
+    <label>용적률 직접 지정 (%)<input data-f="farLimit" inputmode="decimal"></label>
+  </div></fieldset>
+  <fieldset><legend>편의시설 치수 (해당 시)</legend><div class="grid" id="bfInputs"></div></fieldset>
+</section>
+
+<section class="panel" data-tab="app" hidden>
+  <h2>대상 판정</h2>
+  <p class="lead">법령·조례 원문 기준으로 판정합니다. 판정에 꼭 필요한 정보가 없으면 "답변 필요"로 표시하고 그 자리에서 질문합니다. <span id="appSum"></span></p>
+  <div id="appList"></div>
+</section>
+
+<section class="panel" data-tab="docs" hidden>
+  <h2>서류 올리기·체크</h2>
+  <p class="lead">PDF·HWPX·DOCX·XLSX는 본문까지 읽어 분류하고 필수 내용을 확인합니다. 파일은 이 브라우저 안에서만 처리되고 서버로 전송되지 않습니다.</p>
+  <div id="drop" tabindex="0" role="button"><b>파일을 끌어 놓거나 클릭</b><div class="hint">여러 개 동시 가능</div></div>
+  <input type="file" id="fileIn" multiple hidden>
+  <div class="card" style="margin-top:14px"><h3>올린 파일</h3><div id="fileList"></div></div>
+  <div id="checklist"></div>
+</section>
+
+<section class="panel" data-tab="nums" hidden>
+  <h2>수치 검토</h2>
+  <p class="lead">선택한 지자체 조례값(없으면 법정 기준)으로 비교합니다.</p>
+  <div class="card" id="numTable"></div>
+</section>
+
+<section class="panel" data-tab="report" hidden>
+  <div class="actions"><button class="primary" id="printBtn">보고서 인쇄·PDF 저장</button><button id="copyPrompt">Claude 정밀검토 요청문 복사</button></div>
+  <textarea id="promptOut" hidden aria-label="요청문"></textarea>
+  <div id="report"></div>
+</section>
+
+<section class="panel" data-tab="local" hidden>
+  <h2>지자체 조례</h2>
+  <div id="localBox"></div>
+</section>
+
+<section class="panel" data-tab="meta" hidden>
+  <h2>법령 업데이트</h2>
+  <div id="metaBox"></div>
+</section>
+</main>
+
+<dialog id="keyDlg">
+  <h3>VWorld API 키</h3>
+  <p class="hint">주소 → 용도지역·지역지구 조회에 사용합니다. vworld.kr에서 발급한 키(서비스 URL에 juaworld.github.io 등록)를 넣으세요. 키는 이 브라우저에만 저장됩니다.</p>
+  <input id="keyIn" style="width:100%" placeholder="API 키">
+  <p style="text-align:right;margin:12px 0 0"><button onclick="this.closest('dialog').close()">취소</button> <button class="primary" id="keySave">저장</button></p>
+</dialog>
+<div id="toast" role="status"></div>
+<script src="rules.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
