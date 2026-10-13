@@ -14,7 +14,14 @@ var lsSet = function (k, v) { try { localStorage.setItem(k, v); return true; } c
 /* ---------- 데이터 ---------- */
 var D = { regions: null, national: null, meta: null, detail: {} };
 function loadJSON(u) { return fetch(u, { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error(u + ' ' + r.status); return r.json(); }); }
-function regionOf(p) { return D.regions && p.region ? D.regions.regions[p.region] : null; }
+function regionOf(p) {
+  var r = D.regions && p.region ? D.regions.regions[p.region] : null;
+  var o = window.VPC_SETTINGS && VPC_SETTINGS.overrides ? VPC_SETTINGS.overrides[p.region] : null;
+  if (!r || !o) return r;
+  var park = Object.assign({}, r.park, o.park || {});
+  return Object.assign({}, r, { bcr: Object.assign({}, r.bcr, o.bcr || {}), far: Object.assign({}, r.far, o.far || {}), park: park, disabledPct: o.disabledPct != null ? o.disabledPct : r.disabledPct,
+    scapeTiers: o.scapeTiers && o.scapeTiers.length ? o.scapeTiers : r.scapeTiers, has: Object.assign({}, r.has, Object.keys(o.park || {}).length ? { park: true } : {}), overridden: true });
+}
 function regionDetail(p) { var r = regionOf(p); return r ? D.detail[r.id] : null; }
 function ensureDetail(p) {
   var r = regionOf(p); if (!r || D.detail[r.id]) return Promise.resolve();
@@ -48,12 +55,13 @@ function limits(p) {
   var r = regionOf(p), z = ZONES[p.zone] || [0, 0];
   var bcr = num(p.bcrLimit) || (r && r.bcr[p.zone]) || z[0];
   var far = num(p.farLimit) || (r && r.far[p.zone]) || z[1];
-  var bcrSrc = num(p.bcrLimit) ? '직접 입력' : (r && r.bcr[p.zone] ? '조례' : '국토계획법 시행령 상한');
-  var farSrc = num(p.farLimit) ? '직접 입력' : (r && r.far[p.zone] ? '조례' : '국토계획법 시행령 상한');
+  var ovr = window.VPC_SETTINGS && VPC_SETTINGS.overrides ? VPC_SETTINGS.overrides[p.region] || {} : {};
+  var bcrSrc = num(p.bcrLimit) ? '직접 입력' : (ovr.bcr && ovr.bcr[p.zone] != null ? '관리자 보정' : r && r.bcr[p.zone] ? '조례' : '국토계획법 시행령 상한');
+  var farSrc = num(p.farLimit) ? '직접 입력' : (ovr.far && ovr.far[p.zone] != null ? '관리자 보정' : r && r.far[p.zone] ? '조례' : '국토계획법 시행령 상한');
   var nat = (D.national && D.national.parkNat) || {};
   var natUnit = function (u) { return (typeof nat[u] === 'number' ? nat[u] : null) || PARK_NAT[u] || PARK_NAT['기타']; };
   var pu = r && r.park ? r.park[p.use] : null, parkUnit, parkSrc;
-  if (typeof pu === 'number') { parkUnit = pu; parkSrc = '조례 별표'; }
+  if (typeof pu === 'number') { parkUnit = pu; parkSrc = ovr.park && ovr.park[p.use] != null ? '관리자 보정' : '조례 별표'; }
   else if (pu === 'national') { parkUnit = natUnit(p.use); parkSrc = '조례 → 주차장법 시행령 별표1'; }
   else if (r && r.park && typeof r.park['기타'] === 'number' && !PARK_NAT[p.use]) { parkUnit = r.park['기타']; parkSrc = '조례 별표(그 밖의 건축물)'; }
   else { parkUnit = natUnit(p.use); parkSrc = r && r.has && r.has.park ? '조례에 별도 항목 없음 → 주차장법 시행령 별표1' : '주차장법 시행령 별표1'; }
@@ -480,7 +488,7 @@ function jsonp(url) {
   });
 }
 function vw(path, params) {
-  var key = lsGet(KEYSTORE); if (!key) return Promise.reject(new Error('VWorld API 키가 없습니다. 상단 "설정"에서 입력하세요.'));
+  var key = lsGet(KEYSTORE) || (window.VPC_SETTINGS && VPC_SETTINGS.vworldKey); if (!key) return Promise.reject(new Error('VWorld API 키가 없습니다. 관리자가 "설정"에서 등록해야 합니다.'));
   var q = new URLSearchParams(Object.assign({ key: key, domain: location.origin, format: 'json' }, params)).toString();
   var url = VW + path + '?' + q;
   return fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).catch(function () { return jsonp(url); });
@@ -734,8 +742,6 @@ document.addEventListener('DOMContentLoaded', function () {
       .catch(function (err) { $('#addrMsg').textContent = err.message + ' — 용도지역·지자체를 직접 선택해도 됩니다.'; });
   });
   $('#addrIn').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('#addrBtn').click(); });
-  $('#keyBtn').addEventListener('click', function () { $('#keyIn').value = lsGet(KEYSTORE) || ''; $('#keyDlg').showModal(); });
-  $('#keySave').addEventListener('click', function () { lsSet(KEYSTORE, $('#keyIn').value.trim()); $('#keyDlg').close(); toast('VWorld 키를 이 브라우저에 저장했습니다'); });
 
   $('#prjSel').addEventListener('change', function (e) { state.cur = e.target.value; save(); ensureDetail(cur().p); renderAll(); });
   $('#prjNew').addEventListener('click', function () { var n = newProject(); state.projects.push(n); state.cur = n.id; save(); renderAll(); $('.tabs button[data-tab="info"]').click(); });
@@ -762,5 +768,5 @@ document.addEventListener('DOMContentLoaded', function () {
     ensureDetail(cur().p); renderAll();
   });
 });
-window.VPC = { applicability: applicability, numericChecks: numericChecks, evaluate: evaluate, state: function () { return state; }, D: D, splitClauses: splitClauses, evalScapeClause: evalScapeClause, landscapeNeed: landscapeNeed, limits: limits, applyLookup: applyLookup };
+window.VPC = { renderAll: renderAll, toast: toast, cur: cur, save: save, regionRaw: function (k) { return D.regions ? D.regions.regions[k] : null; }, applicability: applicability, numericChecks: numericChecks, evaluate: evaluate, state: function () { return state; }, D: D, splitClauses: splitClauses, evalScapeClause: evalScapeClause, landscapeNeed: landscapeNeed, limits: limits, applyLookup: applyLookup };
 })();

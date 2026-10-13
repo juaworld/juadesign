@@ -125,7 +125,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
   <p class="lead">주소를 조회하면 용도지역·지역지구·대지면적·지자체가 자동으로 들어가고, 지자체 조례 기준이 한꺼번에 적용됩니다.</p>
   <fieldset><legend>주소로 자동 세팅</legend>
     <div class="addr"><input id="addrIn" placeholder="지번 또는 도로명 주소 (예: 화성시 남양읍 남양리 1234)"><button class="primary" id="addrBtn">조회</button></div>
-    <p id="addrMsg">VWorld API 키가 필요합니다(상단 "설정"). 키 없이도 아래에서 지자체·용도지역을 직접 고를 수 있습니다.</p>
+    <p id="addrMsg">지번 또는 도로명 주소를 넣고 조회하세요. 조회가 안 되면 아래에서 지자체·용도지역을 직접 고를 수 있습니다.</p>
     <div id="landUses"></div>
   </fieldset>
   <fieldset><legend>기본</legend><div class="grid">
@@ -227,5 +227,6 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 <div id="toast" role="status"></div>
 <script src="rules.js"></script>
 <script src="app.js"></script>
+<script src="admin.js"></script>
 </body>
 </html>
