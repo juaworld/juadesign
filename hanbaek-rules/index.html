@@ -168,6 +168,14 @@ textarea.in.code{font-family:var(--mono);font-size:13px;min-height:180px}
 .rule-f{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;font-size:12.5px;color:var(--ink-3)}
 .rel{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:600;padding:2px 8px;border-radius:6px;background:var(--surface-2);border:1px solid var(--line);text-decoration:none;color:var(--ink-2)}
 a.rel:hover{border-color:var(--line-2)}
+.atts{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.atts .lbl{font-size:12px;font-weight:700;color:var(--ink-3)}
+.att{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface-2);text-decoration:none;color:var(--ink);font-size:13.5px;font-weight:600}
+.att:hover{border-color:var(--line-2);background:#fff}
+.att .ext{font-size:11px;font-weight:700;padding:2px 6px;border-radius:5px;background:var(--brand-soft);color:var(--brand-ink);letter-spacing:.02em}
+.att .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.att .dl{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--brand-ink)}
+.att-in{display:inline-flex;align-items:center;gap:3px;font-weight:600;color:var(--brand-ink);text-decoration:underline;text-underline-offset:2px}
 .cat-banner{padding:12px 16px;margin-bottom:12px;font-size:13.5px;color:var(--ink-2)}
 .empty{padding:40px 20px;text-align:center;color:var(--ink-3)}
 
@@ -364,15 +372,40 @@ var ICON = {
   up: '<svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v11H3V10z"/><path d="M7 10l4-8a3 3 0 0 1 3 3v4h6a2 2 0 0 1 2 2.3l-1.4 8A2 2 0 0 1 18.6 21H7"/></svg>',
   down: '<svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V3h4v11z"/><path d="M17 14l-4 8a3 3 0 0 1-3-3v-4H4a2 2 0 0 1-2-2.3l1.4-8A2 2 0 0 1 5.4 3H17"/></svg>',
   heart: '<svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.7 4.5c2.1 0 3.6 1.2 5.3 3 1.7-1.8 3.2-3 5.3-3 3.7 0 5.8 3.9 4.3 7.3C19.5 16.4 12 21 12 21Z"/></svg>',
-  eye: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>'
+  eye: '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+  dl: '<svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>',
+  clip: '<svg class="ico" style="width:13px;height:13px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L15.6 7"/></svg>'
 };
 
-/* 간단 서식: 빈 줄 문단 · '- ' 목록 · '| a | b |' 표 · '> ' 안내 · '### ' 소제목 · **굵게** */
-function rich(text) {
+/* 첨부파일: 구글 드라이브·문서 공유 링크를 바로 다운로드 주소로 바꿈 */
+function dlUrl(u) {
+  u = String(u || '').trim();
+  if (!/^https?:\/\//i.test(u)) return '';
+  var m = u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:.*&)?id=)([\w-]{10,})/);
+  if (m) return 'https://drive.google.com/uc?export=download&id=' + m[1];
+  m = u.match(/docs\.google\.com\/(document|spreadsheets|presentation)\/d\/([\w-]{10,})/);
+  if (m) return 'https://docs.google.com/' + m[1] + '/d/' + m[2] + '/export?format=' + { document: 'docx', spreadsheets: 'xlsx', presentation: 'pptx' }[m[1]];
+  return u;
+}
+function attExt(a) {
+  var m = String(a.name).match(/\.([a-z0-9]{2,5})$/i) || String(a.url).split('?')[0].match(/\.([a-z0-9]{2,5})$/i);
+  if (m) return m[1].toUpperCase();
+  var g = String(a.url).match(/docs\.google\.com\/(document|spreadsheets|presentation)/);
+  return g ? { document: 'DOCX', spreadsheets: 'XLSX', presentation: 'PPTX' }[g[1]] : '파일';
+}
+function attLink(a, inline) {
+  var u = dlUrl(a.url); if (!u) return esc(a.name);
+  if (inline) return '<a class="att-in" href="' + esc(u) + '" target="_blank" rel="noopener" title="' + esc(a.name) + ' 내려받기">' + ICON.clip + esc(a.name) + '</a>';
+  return '<a class="att" href="' + esc(u) + '" target="_blank" rel="noopener"><span class="ext">' + esc(attExt(a)) + '</span><span class="nm">' + esc(a.name) + '</span><span class="dl">' + ICON.dl + '내려받기</span></a>';
+}
+
+/* 간단 서식: 빈 줄 문단 · '- ' 목록 · '| a | b |' 표 · '> ' 안내 · '### ' 소제목 · **굵게** · [[첨부파일명]] */
+function rich(text, atts) {
   if (!text) return '';
   var lines = String(text).replace(/\r\n/g, '\n').split('\n');
   var out = [], i = 0;
-  function inl(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>'); }
+  function att(m, name) { var a = (atts || []).filter(function (x) { return esc(x.name) === name; })[0]; return a ? attLink(a, true) : name; }
+  function inl(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\[\[(.+?)\]\]/g, att); }
   while (i < lines.length) {
     var ln = lines[i];
     if (!ln.trim()) { i++; continue; }
@@ -584,7 +617,7 @@ function pHome() {
 function visibleRules() { return (S.db.rules || []).filter(function (r) { return adminView() || r.public !== false; }); }
 function matchQ(r, q) {
   if (!q) return true;
-  var hay = (r.id + ' ' + r.title + ' ' + plain(r.current) + ' ' + (r.note || '') + ' ' + (r.tags || []).join(' ') + ' ' + catName(r.cat)).toLowerCase();
+  var hay = (r.id + ' ' + r.title + ' ' + plain(r.current) + ' ' + (r.note || '') + ' ' + (r.tags || []).join(' ') + ' ' + (r.attachments || []).map(function (a) { return a.name; }).join(' ') + ' ' + catName(r.cat)).toLowerCase();
   return q.toLowerCase().split(/\s+/).every(function (w) { return hay.indexOf(w) >= 0; });
 }
 function pRules(q) {
@@ -619,7 +652,8 @@ function ruleCard(r) {
   var s = st('rule', r.status);
   var h = '<article class="card rule" id="r-' + esc(r.id) + '"><div class="rule-h"><div class="tt"><span class="idc">' + esc(r.id) + '</span>' + (r.public === false ? ' <span class="tag">' + ICON.lock + ' 비공개</span>' : '') + '<h3>' + esc(r.title) + '</h3></div>' + badge('rule', r.status) +
     (adminView() ? '<button class="btn sm ghost" data-act="rule-edit" data-id="' + esc(r.id) + '" aria-label="편집">' + ICON.edit + '</button>' : '') + '</div>';
-  h += rich(r.current);
+  h += rich(r.current, r.attachments);
+  if ((r.attachments || []).length) h += '<div class="atts"><span class="lbl">첨부파일 ' + r.attachments.length + '</span>' + r.attachments.map(function (a) { return attLink(a); }).join('') + '</div>';
   if (r.note) h += '<div class="note" style="--c:' + s.color + '"><b>' + esc(s.label) + '</b> · ' + esc(r.note) + '</div>';
   if (adminView() && r.adminNote) h += '<div class="admin-note"><b>관리자 메모</b> · ' + esc(r.adminNote) + '</div>';
   var rel = (r.related || []).map(function (id) {
@@ -829,6 +863,7 @@ function editRule(id, newCat) {
   var inner = '<div class="f3"><div class="fg"><label class="f">항목 ID</label><input class="in" name="id" value="' + esc(r.id) + '" required placeholder="예: WT-11"></div><div class="fg"><label class="f">분류</label><select class="in" name="cat">' + opts(db.categories, r.cat, 'id', 'name') + '</select></div><div class="fg"><label class="f">상태</label><select class="in" name="status">' + opts(db.statuses.rule, r.status, 'key', 'label') + '</select></div></div>' +
     '<div class="fg"><label class="f">항목명</label><input class="in" name="title" value="' + esc(r.title) + '" required></div>' +
     '<div class="fg"><label class="f">현행 기준</label><textarea class="in code" name="current">' + esc(r.current) + '</textarea>' + MARKUP_HELP + '</div>' +
+    '<div class="fg"><label class="f">첨부파일</label><textarea class="in code" name="attachments" style="min-height:72px" placeholder="인사기록카드 | https://drive.google.com/file/d/.../view">' + esc((r.attachments || []).map(function (a) { return a.name + ' | ' + a.url; }).join('\n')) + '</textarea><div class="hint">한 줄에 하나씩 <b>파일명 | 링크</b>. 구글 드라이브는 공유를 <b>링크가 있는 모든 사용자</b>로 바꾼 뒤 링크를 붙여 넣으세요. 본문에 <b>[[파일명]]</b>이라고 쓰면 그 자리에서 바로 내려받을 수 있습니다.</div></div>' +
     '<div class="fg"><label class="f">상태 안내 (직원에게 표시)</label><textarea class="in" name="note" style="min-height:64px" placeholder="예: 인상안을 검토 중입니다. 확정 전까지는 현행 기준이 적용됩니다.">' + esc(r.note) + '</textarea></div>' +
     '<div class="fg"><label class="f">관리자 메모 (관리자만)</label><textarea class="in" name="adminNote" style="min-height:64px">' + esc(r.adminNote || '') + '</textarea></div>' +
     '<div class="f3"><div class="fg"><label class="f">관련 과제 ID</label><input class="in" name="related" value="' + esc((r.related || []).join(', ')) + '" placeholder="M1, X3"></div><div class="fg"><label class="f">태그</label><input class="in" name="tags" value="' + esc((r.tags || []).join(', ')) + '" placeholder="신설"></div><div class="fg"><label class="f">기준 시점</label><input class="in" name="updated" value="' + esc(r.updated || '') + '" placeholder="2027-01"></div></div>' +
@@ -837,7 +872,15 @@ function editRule(id, newCat) {
   S.modalSubmit = function (v) {
     var nid = v.id.trim(); if (!nid) return toast('ID를 입력하세요', true);
     if (db.rules.some(function (x) { return x.id === nid && x !== r; })) return toast('이미 있는 ID입니다', true);
-    var o = { id: nid, cat: v.cat, title: v.title.trim(), current: v.current, status: v.status, note: v.note.trim(), adminNote: v.adminNote.trim(), related: split(v.related), tags: split(v.tags), updated: v.updated.trim(), public: v.public };
+    var atts = [], bad = [];
+    v.attachments.split('\n').forEach(function (l) {
+      if (!l.trim()) return;
+      var k = l.lastIndexOf('|'), name = k < 0 ? '' : l.slice(0, k).trim(), url = k < 0 ? l.trim() : l.slice(k + 1).trim();
+      if (!dlUrl(url)) return bad.push(l.trim());
+      atts.push({ name: name || url.split('/').pop().split('?')[0] || '첨부파일', url: url });
+    });
+    if (bad.length) return toast('첨부 링크는 http(s)로 시작해야 합니다: ' + bad[0], true);
+    var o = { id: nid, cat: v.cat, title: v.title.trim(), current: v.current, status: v.status, note: v.note.trim(), adminNote: v.adminNote.trim(), related: split(v.related), tags: split(v.tags), updated: v.updated.trim(), public: v.public, attachments: atts };
     if (isNew) db.rules.push(o); else Object.assign(r, o);
     return saveDb(v._note || (nid + ' ' + o.title + (isNew ? ' 신설' : ' 수정')), v._pub).then(function () { closeModal(); render(); });
   };
