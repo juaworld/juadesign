@@ -863,7 +863,9 @@ function editRule(id, newCat) {
   var inner = '<div class="f3"><div class="fg"><label class="f">항목 ID</label><input class="in" name="id" value="' + esc(r.id) + '" required placeholder="예: WT-11"></div><div class="fg"><label class="f">분류</label><select class="in" name="cat">' + opts(db.categories, r.cat, 'id', 'name') + '</select></div><div class="fg"><label class="f">상태</label><select class="in" name="status">' + opts(db.statuses.rule, r.status, 'key', 'label') + '</select></div></div>' +
     '<div class="fg"><label class="f">항목명</label><input class="in" name="title" value="' + esc(r.title) + '" required></div>' +
     '<div class="fg"><label class="f">현행 기준</label><textarea class="in code" name="current">' + esc(r.current) + '</textarea>' + MARKUP_HELP + '</div>' +
-    '<div class="fg"><label class="f">첨부파일</label><textarea class="in code" name="attachments" style="min-height:72px" placeholder="인사기록카드 | https://drive.google.com/file/d/.../view">' + esc((r.attachments || []).map(function (a) { return a.name + ' | ' + a.url; }).join('\n')) + '</textarea><div class="hint">한 줄에 하나씩 <b>파일명 | 링크</b>. 구글 드라이브는 공유를 <b>링크가 있는 모든 사용자</b>로 바꾼 뒤 링크를 붙여 넣으세요. 본문에 <b>[[파일명]]</b>이라고 쓰면 그 자리에서 바로 내려받을 수 있습니다.</div></div>' +
+    '<div class="fg"><label class="f">첨부파일</label><textarea class="in code" name="attachments" style="min-height:72px" placeholder="인사기록카드 | https://drive.google.com/file/d/.../view">' + esc((r.attachments || []).map(function (a) { return a.name + ' | ' + a.url; }).join('\n')) + '</textarea>' +
+      '<div class="row" style="margin-top:8px"><label class="btn sm">' + ICON.plus + '컴퓨터에서 파일 올리기<input type="file" multiple data-act="att-upload" style="display:none"></label><span class="muted small" id="att-st"></span></div>' +
+      '<div class="hint">올린 파일은 구글 드라이브 \'한백 사내규정 첨부파일\' 폴더에 저장되고 아래 줄이 자동으로 추가됩니다(파일당 10MB 이하). 드라이브 링크를 직접 붙여 넣어도 됩니다: 한 줄에 하나씩 <b>파일명 | 링크</b>. 본문에 <b>[[파일명]]</b>이라고 쓰면 그 자리에서 바로 내려받을 수 있습니다.</div></div>' +
     '<div class="fg"><label class="f">상태 안내 (직원에게 표시)</label><textarea class="in" name="note" style="min-height:64px" placeholder="예: 인상안을 검토 중입니다. 확정 전까지는 현행 기준이 적용됩니다.">' + esc(r.note) + '</textarea></div>' +
     '<div class="fg"><label class="f">관리자 메모 (관리자만)</label><textarea class="in" name="adminNote" style="min-height:64px">' + esc(r.adminNote || '') + '</textarea></div>' +
     '<div class="f3"><div class="fg"><label class="f">관련 과제 ID</label><input class="in" name="related" value="' + esc((r.related || []).join(', ')) + '" placeholder="M1, X3"></div><div class="fg"><label class="f">태그</label><input class="in" name="tags" value="' + esc((r.tags || []).join(', ')) + '" placeholder="신설"></div><div class="fg"><label class="f">기준 시점</label><input class="in" name="updated" value="' + esc(r.updated || '') + '" placeholder="2027-01"></div></div>' +
@@ -884,6 +886,37 @@ function editRule(id, newCat) {
     if (isNew) db.rules.push(o); else Object.assign(r, o);
     return saveDb(v._note || (nid + ' ' + o.title + (isNew ? ' 신설' : ' 수정')), v._pub).then(function () { closeModal(); render(); });
   };
+}
+/* 첨부파일 업로드: 관리자 PC 파일 → Apps Script → 구글 드라이브 */
+var ATT_MAX = 10 * 1024 * 1024;
+function uploadAtts(input) {
+  var files = Array.prototype.slice.call(input.files || []); input.value = '';
+  var ta = document.querySelector('textarea[name=attachments]'), stEl = document.getElementById('att-st');
+  var save = document.querySelector('#mask form button.pri');
+  var big = files.filter(function (f) { return f.size > ATT_MAX; });
+  if (big.length) toast(big[0].name + ' 파일이 10MB를 넘어 제외했습니다', true);
+  files = files.filter(function (f) { return f.size <= ATT_MAX; });
+  if (!files.length || !ta) return;
+  if (save) save.disabled = true;
+  var done = 0;
+  files.reduce(function (p, f) {
+    return p.then(function () {
+      if (stEl) stEl.textContent = '올리는 중… ' + f.name + ' (' + (done + 1) + '/' + files.length + ')';
+      return new Promise(function (ok, no) { var rd = new FileReader(); rd.onload = function () { ok(String(rd.result).split(',')[1] || ''); }; rd.onerror = no; rd.readAsDataURL(f); })
+        .then(function (data) { return api('uploadFile', { name: f.name, mime: f.type, data: data }); })
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.code === 'BAD_ACTION' ? '서버(Apps Script)를 새 버전으로 다시 배포해야 파일 올리기를 쓸 수 있습니다.' : res.error);
+          ta.value = ta.value.replace(/\s*$/, '') + (ta.value.trim() ? '\n' : '') + res.name + ' | ' + res.url;
+          done++;
+        });
+    });
+  }, Promise.resolve()).then(function () {
+    toast(done + '개 파일을 올렸습니다. 저장을 눌러야 반영됩니다');
+  }).catch(function (e) {
+    toast((e && e.message) || '파일을 올리지 못했습니다', true);
+  }).then(function () {
+    if (stEl) stEl.textContent = ''; if (save) save.disabled = false;
+  });
 }
 function split(s) { return String(s || '').split(/[,，]/).map(function (x) { return x.trim(); }).filter(Boolean); }
 
@@ -1038,6 +1071,7 @@ document.addEventListener('change', function (e) {
   var f = e.target.getAttribute && e.target.getAttribute('data-filter');
   if (f) { S.sugFilter[f] = e.target.value; render(); return; }
   if (e.target.matches('input[type=file][data-act=import]')) importJson(e.target.files[0]);
+  if (e.target.matches('input[type=file][data-act=att-upload]')) uploadAtts(e.target);
   if (e.target.id === 's-cat') { S.sugCat = e.target.value; var rel = document.getElementById('s-rel'); if (rel) rel.innerHTML = relOptions(S.sugCat, ''); }
 });
 document.addEventListener('submit', function (e) {
