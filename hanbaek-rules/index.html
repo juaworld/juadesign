@@ -643,7 +643,6 @@ function pRules(q) {
     var rs = list.filter(function (r) { return r.cat === c.id; });
     if (!rs.length) return;
     h += '<div class="cat-h"><h2>' + esc(c.name) + '</h2><span class="d">' + esc(c.desc || '') + '</span></div>';
-    if (c.id === 'mp' && cat !== 'all') h += '<div class="card cat-banner">아래 기준은 법에 따라 <b>지금도 그대로 적용</b>됩니다. 사내규정에 별도 장으로 정리하는 중이라 \'개정 검토\'로 표시했습니다.</div>';
     h += '<div class="grid">' + rs.map(ruleCard).join('') + '</div>';
   });
   h += '</div></div>';
