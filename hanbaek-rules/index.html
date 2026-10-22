@@ -510,8 +510,8 @@ function render() {
   if (S.needCode) return renderGate();
   if (S.err === 'NO_API') return renderNoApi();
   var r = route();
-  var navs = [['home', '홈'], ['rules', '전체 규정'], ['tasks', '개선과제'], ['suggest', '건의함'], ['history', '공지·개정이력']];
-  if (adminView()) navs.push(['settings', '관리 설정']);
+  var navs = [['home', '홈'], ['rules', '전체 규정'], ['tasks', '개선과제'], ['suggest', '건의함']];
+  if (adminView()) navs.push(['history', '개정이력'], ['settings', '관리 설정']);
   var hd = '';
   if (S.isAdmin) {
     hd += '<div class="adm-bar"><div class="adm-in"><b>관리자 모드</b><span style="opacity:.75">' + (S.preview ? '직원 화면 미리보기 중' : '편집 버튼으로 모든 내용을 수정할 수 있습니다') + '</span><span class="sp"></span>' +
@@ -523,7 +523,7 @@ function render() {
   if (S.loading || !S.db) body = S.err ? '<div class="wrap"><div class="card empty">' + esc(S.err) + '<div style="margin-top:12px"><button class="btn" data-act="reload">다시 시도</button></div></div></div>' : skeleton();
   else {
     var fn = { home: pHome, rules: pRules, tasks: pTasks, suggest: pSuggest, history: pHistory, settings: pSettings }[r.path] || pHome;
-    if (r.path === 'settings' && !adminView()) fn = pHome;
+    if ((r.path === 'settings' || r.path === 'history') && !adminView()) fn = pHome;
     body = '<main class="wrap">' + fn(r.q) + '</main>';
   }
   var ft = '<footer class="ft"><div class="ft-in"><img src="' + window.HB_LOGO + '" alt=""><span>' + esc(S.db ? S.db.meta.company : '㈜한백건축사사무소') + ' · ' + esc(S.db ? S.db.meta.owner : '') + '</span>' +
@@ -579,7 +579,6 @@ function editHome() {
 function pHome() {
   var db = S.db, rules = visibleRules();
   var counts = {}; rules.forEach(function (r) { counts[r.status] = (counts[r.status] || 0) + 1; });
-  var pinned = (db.notices || []).filter(function (n) { return n.pin && (n.public !== false || adminView()); });
   var h = (adminView() ? '<div class="row" style="justify-content:flex-end;margin-bottom:10px"><button class="btn sm dark" data-act="home-edit">' + ICON.edit + '메인 문구 편집</button></div>' : '') + '<section class="hero"><h1>' + heroTitle(HT('title')) + '</h1><p>' + esc(db.meta.intro) + '</p>' +
     '<form class="search-big" data-form="search" role="search">' + ICON.search + '<input name="q" placeholder="' + esc(HT('searchHint')) + '" aria-label="규정 검색"><button class="btn dark sm">검색</button></form>' +
     '<div class="row"><a class="btn pri" href="#/suggest">' + esc(HT('btnSuggest')) + '</a><a class="btn" href="#/rules">' + esc(HT('btnRules')) + '</a><span class="muted small">기준: ' + esc(db.meta.baseVersion) + '</span></div></section>';
@@ -591,12 +590,6 @@ function pHome() {
   });
   h += '</div>';
 
-  if (pinned.length) {
-    h += '<div class="sec-t"><h2>' + esc(HT('secNotice')) + '</h2><a class="btn ghost sm" href="#/history">전체 보기</a></div><div class="grid">';
-    pinned.forEach(function (n) { h += '<div class="card notice"><div class="muted small">' + fmtDate(n.date) + '</div><div class="t">' + esc(n.title) + '</div><div class="small" style="color:var(--ink-2)">' + esc(n.body) + '</div></div>'; });
-    h += '</div>';
-  }
-
   h += '<div class="sec-t"><h2>' + esc(HT('secCats')) + '</h2></div><div class="cats">';
   db.categories.forEach(function (c) {
     var rs = rules.filter(function (r) { return r.cat === c.id; });
@@ -607,10 +600,10 @@ function pHome() {
 
   var recent = sortedHist().slice(0, 5);
   var changing = rules.filter(function (r) { return r.status === 'review' || r.status === 'planned'; }).slice(0, 8);
-  h += '<div class="two" style="margin-top:34px"><div><div class="sec-t" style="margin-top:0"><h2>' + esc(HT('secChanging')) + '</h2><a class="btn ghost sm" href="#/rules?status=review">더 보기</a></div><div class="card">' +
+  h += '<div class="' + (adminView() ? 'two' : '') + '" style="margin-top:34px"><div><div class="sec-t" style="margin-top:0"><h2>' + esc(HT('secChanging')) + '</h2><a class="btn ghost sm" href="#/rules?status=review">더 보기</a></div><div class="card">' +
     (changing.length ? changing.map(function (r) { return '<a href="#/rules?id=' + r.id + '" style="display:flex;gap:10px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--line);text-decoration:none"><span class="idc">' + r.id + '</span><span style="flex:1;font-weight:600">' + esc(r.title) + '</span>' + badge('rule', r.status) + '</a>'; }).join('') : '<div class="empty">없음</div>') + '</div></div>' +
-    '<div><div class="sec-t" style="margin-top:0"><h2>' + esc(HT('secRecent')) + '</h2><a class="btn ghost sm" href="#/history">이력 보기</a></div><div class="card card-b">' +
-    (recent.length ? '<div class="tl">' + recent.map(function (x) { return '<div class="it"><div class="at">' + fmtDate(x.at) + '</div><div>' + esc(x.note) + '</div></div>'; }).join('') + '</div>' : '<div class="muted">아직 기록이 없습니다.</div>') + '</div></div></div>';
+    (adminView() ? '<div><div class="sec-t" style="margin-top:0"><h2>' + esc(HT('secRecent')) + '</h2><a class="btn ghost sm" href="#/history">이력 보기</a></div><div class="card card-b">' +
+    (recent.length ? '<div class="tl">' + recent.map(function (x) { return '<div class="it"><div class="at">' + fmtDate(x.at) + '</div><div>' + esc(x.note) + '</div></div>'; }).join('') + '</div>' : '<div class="muted">아직 기록이 없습니다.</div>') + '</div></div>' : '') + '</div>';
   return h;
 }
 
@@ -780,17 +773,13 @@ function sugCard(s) {
   return h + '</article>';
 }
 
-/* ----- 공지·개정이력 ----- */
+/* ----- 개정이력 (관리자 전용) ----- */
 function pHistory() {
-  var db = S.db;
-  var ns = (db.notices || []).filter(function (n) { return n.public !== false || adminView(); }).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
-  var h = '<div class="page-h"><div><h1>공지·개정이력</h1><p>규정이 바뀌면 이곳에 기록됩니다.</p></div>' + (adminView() ? '<button class="btn pri" data-act="notice-new">' + ICON.plus + '공지 작성</button>' : '') + '</div>';
-  h += '<div class="two"><div><div class="sec-t" style="margin-top:0"><h2>공지</h2></div><div class="grid">' +
-    (ns.length ? ns.map(function (n) { return '<div class="card notice"><div class="row"><span class="muted small">' + fmtDate(n.date) + '</span>' + (n.pin ? '<span class="tag red">상단 고정</span>' : '') + (n.public === false ? '<span class="tag">' + ICON.lock + ' 비공개</span>' : '') + '<span class="sp"></span>' + (adminView() ? '<button class="btn ghost sm" data-act="notice-edit" data-id="' + esc(n.id) + '">' + ICON.edit + '</button>' : '') + '</div><div class="t">' + esc(n.title) + '</div><div style="white-space:pre-wrap;font-size:14px;color:var(--ink-2)">' + esc(n.body) + '</div></div>'; }).join('') : '<div class="card empty">공지가 없습니다.</div>') + '</div></div>';
   var hist = sortedHist();
-  h += '<div><div class="sec-t" style="margin-top:0"><h2>개정이력</h2>' + (adminView() ? '<button class="btn sm" data-act="hist-new">' + ICON.plus + '이력 추가</button>' : '') + '</div><div class="card card-b">' + (hist.length ? '<div class="tl">' + hist.map(function (x) {
-    return '<div class="it"><div class="row" style="gap:6px"><span class="at">' + fmtDate(x.at) + '</span>' + (adminView() && x.public === false ? '<span class="tag">' + ICON.lock + ' 관리자 전용</span>' : '') + '<span class="sp"></span>' + (adminView() && x.row ? '<button class="btn ghost sm" data-act="hist-edit" data-id="' + x.row + '" aria-label="이력 수정">' + ICON.edit + '</button>' : '') + '</div><div>' + esc(x.note) + '</div></div>';
-  }).join('') + '</div>' : '<div class="muted">기록이 없습니다.</div>') + '</div></div></div>';
+  var h = '<div class="page-h"><div><h1>개정이력</h1><p>규정이 바뀌면 이곳에 기록됩니다. 관리자만 볼 수 있습니다.</p></div><button class="btn pri" data-act="hist-new">' + ICON.plus + '이력 추가</button></div>';
+  h += '<div class="card card-b">' + (hist.length ? '<div class="tl">' + hist.map(function (x) {
+    return '<div class="it"><div class="row" style="gap:6px"><span class="at">' + fmtDate(x.at) + '</span>' + (x.public === false ? '<span class="tag">' + ICON.lock + ' 관리자 전용</span>' : '') + '<span class="sp"></span>' + (x.row ? '<button class="btn ghost sm" data-act="hist-edit" data-id="' + x.row + '" aria-label="이력 수정">' + ICON.edit + '</button>' : '') + '</div><div>' + esc(x.note) + '</div></div>';
+  }).join('') + '</div>' : '<div class="muted">기록이 없습니다.</div>') + '</div>';
   return h;
 }
 
