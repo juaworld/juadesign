@@ -100,6 +100,7 @@ textarea.in.code{font-family:var(--mono);font-size:13px;min-height:180px}
 /* ---------- rich text ---------- */
 .rt{font-size:14.5px;color:var(--ink)}
 .rt p{margin:0 0 10px}
+.rt p,.rt li,.rt td,.rt th,.rt .callout,.rule .note{white-space:pre-wrap}
 .rt p:last-child,.rt ul:last-child,.rt .tbl:last-child,.rt .callout:last-child{margin-bottom:0}
 .rt ul{margin:0 0 10px;padding-left:1.2em}
 .rt li{margin:2px 0}
@@ -408,7 +409,7 @@ function rich(text, atts) {
   function inl(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\[\[(.+?)\]\]/g, att); }
   while (i < lines.length) {
     var ln = lines[i];
-    if (!ln.trim()) { i++; continue; }
+    if (!ln.trim()) { if (out.length && i > 0 && !lines[i - 1].trim()) out.push('<br>'); i++; continue; }
     if (/^\s*\|/.test(ln)) {
       var rows = [];
       while (i < lines.length && /^\s*\|/.test(lines[i])) {
@@ -614,7 +615,7 @@ function pHome() {
 }
 
 /* ----- 사내규정 ----- */
-function visibleRules() { return (S.db.rules || []).filter(function (r) { return adminView() || r.public !== false; }); }
+function visibleRules() { return (S.db.rules || []).filter(function (r) { return adminView() || r.public !== false; }).sort(function (a, b) { return String(a.id).localeCompare(String(b.id), 'ko', { numeric: true }); }); }
 function matchQ(r, q) {
   if (!q) return true;
   var hay = (r.id + ' ' + r.title + ' ' + plain(r.current) + ' ' + (r.note || '') + ' ' + (r.tags || []).join(' ') + ' ' + (r.attachments || []).map(function (a) { return a.name; }).join(' ') + ' ' + catName(r.cat)).toLowerCase();
