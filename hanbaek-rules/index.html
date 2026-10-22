@@ -683,13 +683,13 @@ function pTasks(q) {
   h += '<div class="row" style="margin-bottom:16px"><a class="chip ' + (fsrc === 'all' ? 'on' : '') + '" href="#/tasks">전체 <span class="n">' + list.length + '</span></a>' +
     srcs.map(function (s) { return '<a class="chip ' + (fsrc === s ? 'on' : '') + '" href="#/tasks?src=' + encodeURIComponent(s) + '">' + esc(s) + ' <span class="n">' + list.filter(function (t) { return t.source === s; }).length + '</span></a>'; }).join('') + '</div>';
   if (q.id) S.openTask[q.id] = true;
-  h += '<div class="grid">' + shown.map(function (t) { return taskCard(t); }).join('') + '</div>';
+  h += '<div class="grid">' + shown.map(function (t, i) { return taskCard(t, i + 1); }).join('') + '</div>';
   return h;
 }
-function taskCard(t) {
+function taskCard(t, n) {
   var open = !!S.openTask[t.id];
   var h = '<article class="card task' + (open ? ' open' : '') + '" id="t-' + esc(t.id) + '"><div class="task-h" data-act="task-toggle" data-id="' + esc(t.id) + '" role="button" tabindex="0" aria-expanded="' + open + '">' +
-    '<div class="prio p' + (t.priority || '') + '" title="추진 우선순위">' + (t.priority || '–') + '</div><div class="tt"><div class="row" style="gap:6px"><span class="idc">' + esc(t.id) + '</span><span class="tag">' + esc(t.source) + '</span>' +
+    '<div class="prio p' + n + '" title="추진 우선순위">' + n + '</div><div class="tt"><div class="row" style="gap:6px"><span class="idc">' + esc(t.id) + '</span><span class="tag">' + esc(t.source) + '</span>' +
     (t.verdict && t.verdict !== 'none' ? badge('verdict', t.verdict, 'flat') : '') + (adminView() && !t.public ? '<span class="tag">' + ICON.lock + ' 비공개</span>' : '') + '</div><h3>' + esc(t.title) + '</h3><div class="sum">' + esc(t.summary) + '</div></div>' + badge('stage', t.stage) + ICON.chev + '</div>';
   if (open) {
     h += '<div class="task-b">';
