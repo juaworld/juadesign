@@ -101,8 +101,9 @@ textarea.in.code{font-family:var(--mono);font-size:13px;min-height:180px}
 .rt{font-size:14.5px;color:var(--ink)}
 .rt p{margin:0 0 10px}
 .rt p,.rt li,.rt td,.rt th,.rt .callout,.rule .note{white-space:pre-wrap}
-.rt p:last-child,.rt ul:last-child,.rt .tbl:last-child,.rt .callout:last-child{margin-bottom:0}
-.rt ul{margin:0 0 10px;padding-left:1.2em}
+.rt p:last-child,.rt ul:last-child,.rt ol:last-child,.rt .tbl:last-child,.rt .callout:last-child{margin-bottom:0}
+.rt ul,.rt ol{margin:0 0 10px;padding-left:1.4em}
+.rt li ul,.rt li ol{margin:4px 0 2px}
 .rt li{margin:2px 0}
 .rt li::marker{color:var(--ink-3)}
 .rt h4{font-size:15px;margin:18px 0 8px;letter-spacing:-.01em}
@@ -404,7 +405,7 @@ function attLink(a, inline) {
 function rich(text, atts) {
   if (!text) return '';
   var lines = String(text).replace(/\r\n/g, '\n').split('\n');
-  var out = [], i = 0;
+  var out = [], i = 0, LI = /^\s*(?:[-•]|\d+[.)])\s+/;
   function att(m, name) { var a = (atts || []).filter(function (x) { return esc(x.name) === name; })[0]; return a ? attLink(a, true) : name; }
   function inl(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\[\[(.+?)\]\]/g, att); }
   while (i < lines.length) {
@@ -422,10 +423,15 @@ function rich(text, atts) {
       out.push(h + '</tbody></table></div>');
       continue;
     }
-    if (/^\s*[-•]\s+/.test(ln)) {
-      var li = [];
-      while (i < lines.length && /^\s*[-•]\s+/.test(lines[i])) { li.push('<li>' + inl(lines[i].replace(/^\s*[-•]\s+/, '')) + '</li>'); i++; }
-      out.push('<ul>' + li.join('') + '</ul>');
+    if (LI.test(ln)) {
+      var base = ln.match(/^\s*/)[0].length, ol = /^\s*\d/.test(ln), items = [];
+      while (i < lines.length && LI.test(lines[i])) {
+        var ind = lines[i].match(/^\s*/)[0].length, txt = inl(lines[i].replace(LI, ''));
+        if (ind >= base + 2 && items.length) { var it = items[items.length - 1]; if (!it.sub.length) it.ol = /^\s*\d/.test(lines[i]); it.sub.push(txt); }
+        else items.push({ t: txt, sub: [], ol: false });
+        i++;
+      }
+      out.push((ol ? '<ol>' : '<ul>') + items.map(function (it) { var s = it.ol ? 'ol' : 'ul'; return '<li>' + it.t + (it.sub.length ? '<' + s + '>' + it.sub.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</' + s + '>' : '') + '</li>'; }).join('') + (ol ? '</ol>' : '</ul>'));
       continue;
     }
     if (/^\s*>\s?/.test(ln)) {
@@ -436,7 +442,7 @@ function rich(text, atts) {
     }
     if (/^###\s+/.test(ln)) { out.push('<h4>' + inl(ln.replace(/^###\s+/, '')) + '</h4>'); i++; continue; }
     var p = [];
-    while (i < lines.length && lines[i].trim() && !/^\s*(\||[-•]\s|>|###\s)/.test(lines[i])) { p.push(inl(lines[i])); i++; }
+    while (i < lines.length && lines[i].trim() && !/^\s*(\||[-•]\s|\d+[.)]\s|>|###\s)/.test(lines[i])) { p.push(inl(lines[i])); i++; }
     out.push('<p>' + p.join('<br>') + '</p>');
   }
   return '<div class="rt">' + out.join('') + '</div>';
@@ -841,7 +847,7 @@ function modal(title, inner, foot, cls) {
 function closeModal() { var m = document.getElementById('mask'); if (m) m.remove(); document.body.style.overflow = ''; S.modalSubmit = null; }
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal(); if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-act=task-toggle]')) { e.preventDefault(); e.target.click(); } });
 
-var MARKUP_HELP = '<div class="hint">서식: 빈 줄=문단 · <b>- </b>목록 · <b>| 칸 | 칸 |</b> 표(첫 줄 머리글) · <b>&gt; </b>안내 상자 · <b>### </b>소제목 · <b>**굵게**</b></div>';
+var MARKUP_HELP = '<div class="hint">서식: 빈 줄=문단 · <b>- </b>목록 · <b>1. </b>번호 목록 · 두 칸 들여 쓰면 하위 목록 · <b>| 칸 | 칸 |</b> 표(첫 줄 머리글) · <b>&gt; </b>안내 상자 · <b>### </b>소제목 · <b>**굵게**</b></div>';
 function opts(list, cur, valKey, labKey) { return list.map(function (x) { var v = valKey ? x[valKey] : x, l = labKey ? x[labKey] : x; return '<option value="' + esc(v) + '"' + (String(v) === String(cur) ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join(''); }
 function noteFields(def) { return '<div class="fg" style="margin-top:6px;padding-top:14px;border-top:1px solid var(--line)"><label class="f">변경 메모 (개정이력에 기록)</label><input class="in" name="_note" value="' + esc(def) + '"><label class="chk" style="margin-top:8px"><input type="checkbox" name="_pub" checked> 직원에게 이력 공개</label></div>'; }
 function fd(form) { var o = {}; Array.prototype.forEach.call(form.elements, function (el) { if (!el.name) return; o[el.name] = el.type === 'checkbox' ? el.checked : el.value; }); return o; }
