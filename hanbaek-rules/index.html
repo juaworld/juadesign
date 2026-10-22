@@ -123,7 +123,7 @@ textarea.in.code{font-family:var(--mono);font-size:13px;min-height:180px}
 .hero>*{position:relative;z-index:1}
 .hero h1{font-size:30px;letter-spacing:-.025em;margin:0 0 10px;line-height:1.3}
 .hero h1 em{font-style:normal;color:var(--brand)}
-.hero p{margin:0;color:var(--ink-2);max-width:640px}
+.hero p{margin:0;color:var(--ink-2);max-width:640px;white-space:pre-wrap}
 .hero .row{margin-top:20px}
 .search-big{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line-2);border-radius:999px;padding:4px 4px 4px 16px;max-width:560px;margin-top:20px}
 .search-big input{border:0;outline:none;flex:1;min-width:0;padding:8px 0;font-size:15px;background:transparent}
@@ -571,12 +571,12 @@ function heroTitle(t) { return esc(t).replace(/\*\*(.+?)\*\*/g, '<em>$1</em>').r
 function editHome() {
   var m = S.db.meta;
   var inner = '<div class="fg"><label class="f">메인 제목</label><textarea class="in" name="title" style="min-height:70px">' + esc(HT('title')) + '</textarea><div class="hint">엔터로 줄바꿈 · <b>**한백**</b>처럼 감싸면 빨간색 강조</div></div>' +
-    '<div class="fg"><label class="f">소개 문구</label><textarea class="in" name="intro" style="min-height:90px">' + esc(m.intro || '') + '</textarea></div>';
+    '<div class="fg"><label class="f">소개 문구</label><textarea class="in" name="intro" style="min-height:90px">' + esc(m.intro || '') + '</textarea><div class="hint">엔터로 줄바꿈</div></div>';
   modal('메인 문구 편집', inner, '<button type="button" class="btn" data-act="close">취소</button><button class="btn pri">저장</button>');
   S.modalSubmit = function (v) {
     m.home = m.home || {};
     if (v.title.trim()) m.home.title = v.title.replace(/\r/g, ''); else delete m.home.title;
-    m.intro = v.intro.trim();
+    m.intro = v.intro.replace(/\r/g, '').trim();
     return saveDb('메인 화면 문구 수정', false).then(function () { closeModal(); render(); });
   };
 }
