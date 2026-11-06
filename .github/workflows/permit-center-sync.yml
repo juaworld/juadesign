@@ -1,8 +1,11 @@
 name: permit-center-sync
-# 가상인허가센터: 국가법령·전국 지자체 조례를 매주 자동 동기화
+# 가상인허가센터: 국가법령·전국 지자체 조례를 매일 06:00(한국 시간) 자동 갱신
+# - 받은 자료를 permit-center/data 에 올리면 GitHub Pages 가 사이트를 다시 게시한다
+# - 법령이 바뀌었거나 자동 검증값이 어긋나면 Issues 에 알림 글을 남긴다
+# - 준비: Settings > Secrets and variables > Actions 에 LAW_OC (국가법령정보 공동활용 OPEN API 인증값)
 on:
   schedule:
-    - cron: '7 21 * * 0'   # 매주 월요일 06:07 (KST)
+    - cron: '0 21 * * *'   # UTC 21:00 = 한국 매일 06:00
   workflow_dispatch:
 permissions:
   contents: write
@@ -15,22 +18,37 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: '20'
-      - name: 법령·조례 동기화
+          node-version: 22
+      - name: 법령·조례 받기
         env:
           LAW_OC: ${{ secrets.LAW_OC }}
-        run: node permit-center/scripts/sync.mjs
-      - name: 변경사항 커밋
+        run: |
+          if [ -z "$LAW_OC" ]; then echo "::error::LAW_OC(국가법령정보 API 인증값)가 등록되지 않아 갱신하지 않습니다"; exit 1; fi
+          node permit-center/scripts/sync.mjs
+      - name: 받은 자료 확인 (지자체 수가 크게 줄면 올리지 않음)
+        run: |
+          n=$(node -e "console.log(require('./permit-center/data/regions.json').count||0)")
+          echo "지자체 $n 곳"
+          if [ "$n" -lt 200 ]; then echo "::error::받은 지자체 수가 너무 적어($n) 올리지 않습니다"; exit 1; fi
+      - name: 파일로 열기용 사본(.js) 만들기
+        run: python3 permit-center/scripts/make-file-data.py
+      - name: 바뀐 내용 올리기
         run: |
           git config user.name "permit-center-bot"
           git config user.email "actions@users.noreply.github.com"
           git add permit-center/data
-          if git diff --cached --quiet; then echo "변경 없음"; else git commit -m "가상인허가센터 데이터 자동 동기화 $(date -u +%F)" && git pull --rebase origin main && git push; fi
-      - name: 개정 감지 이슈 등록
+          if git diff --cached --quiet; then
+            echo "바뀐 법규 없음"
+          else
+            git commit -m "가상인허가센터 법규 자동 갱신 $(TZ=Asia/Seoul date +%F)"
+            git pull --rebase origin main
+            git push
+          fi
+      - name: 변경 알림 글 남기기
         if: hashFiles('permit-center/scripts/issue.md') != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh issue create --title "[가상인허가센터] 법령·조례 변경 감지 $(date -u +%F)" --body-file permit-center/scripts/issue.md
+        run: gh issue create --title "[가상인허가센터] 법규 변경 감지 $(TZ=Asia/Seoul date +%F)" --body-file permit-center/scripts/issue.md

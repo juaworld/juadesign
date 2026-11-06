@@ -1,9 +1,10 @@
 /* ===== 가상인허가센터 관리자 모드 =====
    공용 설정은 저장소의 permit-center/config/settings-vN.json (N이 가장 큰 파일)에 보관한다.
-   관리자가 "전체 적용"을 누르면 다음 번호 파일을 만드는 GitHub 페이지가 내용이 채워진 채 열리고, 커밋하면 1~2분 뒤 모든 직원에게 반영된다. */
+   관리자가 "전체 적용"을 누르면 다음 번호 설정 파일(settings-vN.json)이 내려받아진다.
+   그 파일을 GitHub 저장소 juaworld/juadesign 의 permit-center/config/ 에 올리면 1~2분 뒤 모든 직원에게 반영된다. */
 (function () {
 'use strict';
-var REPO = 'juaworld/juadesign', DIR = 'permit-center/config/';
+var DIR = 'permit-center/config/';
 var DEFAULT_HASH = 'c4bd736248b9eeba158d908b5fee0250fe0d290703fec83bfc5aa7393dba88cf'; // 초기 비밀번호 hanbaek2026
 var CACHE = 'vpc2_settings', UNLOCK = 'vpc2_admin';
 var ZONE_LIST = ['제1종전용주거지역','제2종전용주거지역','제1종일반주거지역','제2종일반주거지역','제3종일반주거지역','준주거지역','중심상업지역','일반상업지역','근린상업지역','유통상업지역','전용공업지역','일반공업지역','준공업지역','보전녹지지역','생산녹지지역','자연녹지지역','보전관리지역','생산관리지역','계획관리지역','농림지역','자연환경보전지역'];
@@ -67,7 +68,7 @@ function render() {
   var heightRows = hk.map(function (k) { return '<tr' + (k === p.hdKey ? ' class="hl"' : '') + '><td>' + (k === '*' ? '이 지자체 대표값 <span class="sub">(고시 구분 없이 적용)</span>' : '고시 ' + esc(k) + (k === p.hdKey ? ' <span class="sub">현재 프로젝트</span>' : '')) + '</td><td><input data-ov="heights" data-k="' + esc(k) + '" value="' + esc(hts[k] != null ? hts[k] : '') + '" inputmode="decimal" placeholder="m"></td></tr>'; }).join('');
   var nOv = Object.keys(draft.overrides).filter(function (k) { var o = draft.overrides[k]; return o && (Object.keys(o.bcr || {}).length || Object.keys(o.far || {}).length || Object.keys(o.park || {}).length || o.disabledPct != null || (o.scapeTiers || []).length); }).length;
   d.innerHTML = '<h3>관리자 설정 <small class="hint">공용 설정 v' + (S.v || 0) + ' · 보정된 지자체 ' + nOv + '곳</small></h3>' +
-    '<section class="adm-sec"><h4>VWorld API 키 (전 직원 공용)</h4><input id="admKey" type="password" autocomplete="off" style="width:100%" value="' + esc(draft.vworldKey) + '" placeholder="vworld.kr 인증키 — 서비스 URL에 juaworld.github.io 등록 필요">' +
+    '<section class="adm-sec"><h4>VWorld API 키 (전 직원 공용)</h4><input id="admKey" type="password" autocomplete="off" style="width:100%" value="' + esc(draft.vworldKey) + '" placeholder="vworld.kr 인증키 — 서비스 URL에 사이트 주소 등록 필요">' +
     '<label class="ck"><input type="checkbox" id="admShow"> 키 보이기</label><p class="hint">브라우저에서 호출하는 키라서 공개 저장소에 저장되어도 VWorld에 등록한 도메인에서만 동작합니다.</p></section>' +
     '<section class="adm-sec"><h4>공지 문구 (상단 표시)</h4><input id="admNotice" style="width:100%" value="' + esc(draft.notice) + '" placeholder="예: 경관심의 일정은 매월 둘째 주 화요일"></section>' +
     '<section class="adm-sec"><h4>지자체 조례값 보정 — ' + esc(reg || '지자체 미선택') + '</h4>' +
@@ -80,7 +81,7 @@ function render() {
     '<section class="adm-sec"><h4>관리자 비밀번호 변경</h4><input id="admNewPw" type="password" style="width:100%" placeholder="새 비밀번호 (비우면 유지)"></section>' +
     '<p id="admMsg" class="hint"></p>' +
     '<p class="adm-btns"><button data-a="logout" class="ghost">잠그기</button> <button data-a="close">닫기</button> <button data-a="local">이 브라우저에만 적용</button> <button class="primary" data-a="publish">전체 직원에게 적용</button></p>' +
-    '<p class="hint">"전체 직원에게 적용"을 누르면 GitHub 새 파일 화면이 내용이 채워진 채 열립니다. 거기서 초록색 "Commit changes"만 누르면 1~2분 뒤 모든 직원 화면에 반영됩니다.</p>';
+    '<p class="hint">"전체 직원에게 적용"을 누르면 설정 파일이 내려받아집니다. 그 파일을 GitHub 저장소 juaworld/juadesign 의 permit-center/config/ 에 올리면 1~2분 뒤 모든 직원 화면에 반영됩니다.</p>';
 }
 function login() {
   var pw = (document.getElementById('admPw') || {}).value || '';
@@ -122,9 +123,8 @@ function onClick(e) {
       set(CACHE, JSON.stringify(window.VPC_SETTINGS)); applyNotice(); window.VPC.renderAll();
       if (a === 'local') { document.getElementById('admMsg').textContent = '이 브라우저에 적용했습니다. 다른 직원에게는 아직 반영되지 않았습니다.'; return; }
       var json = JSON.stringify(out, null, 1);
-      var url = 'https://github.com/' + REPO + '/new/main?filename=' + encodeURIComponent(DIR + 'settings-v' + next + '.json') + '&value=' + encodeURIComponent(json) + '&message=' + encodeURIComponent('가상인허가센터 공용 설정 v' + next);
-      window.open(url, '_blank', 'noopener');
-      document.getElementById('admMsg').textContent = 'GitHub 창에서 "Commit changes"를 누르면 설정 v' + next + '가 전체에 반영됩니다.';
+      var a2 = document.createElement('a'); a2.href = URL.createObjectURL(new Blob([json], { type: 'application/json' })); a2.download = 'settings-v' + next + '.json'; document.body.appendChild(a2); a2.click(); setTimeout(function () { URL.revokeObjectURL(a2.href); a2.remove(); }, 500);
+      document.getElementById('admMsg').textContent = '내려받은 settings-v' + next + '.json 을 GitHub 저장소 juaworld/juadesign 의 permit-center/config/ 에 올리면 전체에 반영됩니다.';
     });
   }
 }

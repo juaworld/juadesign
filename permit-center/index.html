@@ -112,9 +112,11 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 </style>
 </head>
 <body>
+<div id="file-warn" style="display:none;background:#fdf0d5;color:#9a6100;padding:8px 16px;font-size:13px">법령·조례 데이터를 불러오지 못했습니다. 파일(탐색기)로 열었다면 permit-center\data 폴더에 .js 사본이 있는지 확인하세요(없으면 permit-center\scripts\make-file-data.py 실행). 또는 NAS 웹 주소(http://…)로 열어 주세요.</div>
+<div id="data-age" style="background:#fff7e6;color:#7a4b00;padding:6px 16px;font-size:12.5px;border-bottom:1px solid #f0dcb0">데이터 기준일 <b id="syncDate2">-</b> — <span id="ageMsg">국가법령·전국 지자체 조례를 매일 자동으로 갱신합니다.</span> 판정 결과는 국가법령정보센터·자치법규정보시스템 원문으로 확인하세요.</div>
 <header class="top"><div class="wrap">
   <div class="bar">
-    <div class="brand"><div class="mk">인</div><div><h1>가상인허가센터</h1><small>국가법령·전국 지자체 조례 자동 동기화 · 최종 <span id="syncDate">-</span></small></div></div>
+    <div class="brand"><div class="mk">인</div><div><h1>가상인허가센터</h1><small>국가법령·전국 지자체 조례 · 데이터 기준일 <span id="syncDate">-</span></small></div></div>
     <div class="prj">
       <select id="prjSel" aria-label="프로젝트"></select>
       <button id="prjNew">+ 새 프로젝트</button><button id="prjDup">복제</button><button id="prjDel" class="ghost">삭제</button>

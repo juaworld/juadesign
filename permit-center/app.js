@@ -13,7 +13,18 @@ var lsSet = function (k, v) { try { localStorage.setItem(k, v); return true; } c
 
 /* ---------- 데이터 ---------- */
 var D = { regions: null, national: null, meta: null, detail: {} };
-function loadJSON(u) { return fetch(u, { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error(u + ' ' + r.status); return r.json(); }); }
+function loadJSON(u) { return fetch(u, { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error(u + ' ' + r.status); return r.json(); }).catch(function (e) { return loadDataScript(u).catch(function () { throw e; }); }); }
+// file://(탐색기)로 열면 fetch가 막히므로 같은 이름의 .js 사본(data\*.js, scripts\make-file-data.py로 생성)을 <script>로 읽는다
+function loadDataScript(u) {
+  var store = window.__VPC_DATA = window.__VPC_DATA || {};
+  if (store[u]) return Promise.resolve(store[u]);
+  return new Promise(function (ok, no) {
+    var s = document.createElement('script'); s.src = u.replace(/\.json$/, '.js');
+    s.onload = function () { if (store[u]) ok(store[u]); else no(new Error(u)); };
+    s.onerror = function () { no(new Error(s.src)); };
+    document.head.appendChild(s);
+  });
+}
 function regionOf(p) {
   var r = D.regions && p.region ? D.regions.regions[p.region] : null;
   var o = window.VPC_SETTINGS && VPC_SETTINGS.overrides ? VPC_SETTINGS.overrides[p.region] : null;
@@ -914,7 +925,7 @@ function renderLocal() {
 function renderMeta() {
   var m = D.meta, n = D.national, box = $('#metaBox');
   if (!m || !n) { box.innerHTML = '<p class="empty">동기화 데이터 불러오는 중… (최초 동기화 전이면 비어 있습니다)</p>'; return; }
-  var h = '<div class="card"><h3>자동 업데이트 현황</h3><p>최종 동기화 <b>' + esc(m.updated) + '</b> · 매주 월요일 06시(KST) GitHub Actions가 국가법령정보센터에서 다시 받아옵니다.</p><p>지자체 ' + m.coverage.regions + '곳 · 건폐율/용적률 ' + m.coverage.plan + ' · 조경 ' + m.coverage.landscapeRule + ' · 경관심의 조항 ' + m.coverage.scapeOrdin + ' · 주차 별표 ' + m.coverage.parking + '</p>' +
+  var h = '<div class="card"><h3>자동 업데이트 현황</h3><p>데이터 기준일(최종 동기화) <b>' + esc(m.updated) + '</b> · 매일 06:00 국가법령정보센터에서 법령·전국 지자체 조례를 자동으로 다시 받아 반영합니다(GitHub 자동 갱신). 바뀐 내용은 저장소 Issues에 알림으로 남습니다.</p>' + ((Date.now() - Date.parse(m.updated)) / 864e5 > 3 ? '<p class="warn">자동 갱신이 ' + Math.floor((Date.now() - Date.parse(m.updated)) / 864e5) + '일째 멈춰 있어 기준일 이후 개정된 법령·조례는 반영되지 않았을 수 있습니다.</p>' : '') + '<p>판정 결과는 국가법령정보센터(law.go.kr)·자치법규정보시스템(elis.go.kr) 원문으로 확인하세요.</p><p>지자체 ' + m.coverage.regions + '곳 · 건폐율/용적률 ' + m.coverage.plan + ' · 조경 ' + m.coverage.landscapeRule + ' · 경관심의 조항 ' + m.coverage.scapeOrdin + ' · 주차 별표 ' + m.coverage.parking + '</p>' +
     (m.failedChecks && m.failedChecks.length ? '<p class="warn">기준값 자동 검증 불일치 ' + m.failedChecks.length + '건: ' + m.failedChecks.map(function (c) { return esc(c.law) + '(' + c.id + ')'; }).join(', ') + '</p>' : '<p class="okc">핵심 기준값 자동 검증 ' + (n.checks || []).length + '건 모두 일치</p>') + '</div>';
   h += '<div class="card"><h3>추적 중인 법령</h3><table class="ntab"><thead><tr><th>법령</th><th>시행일</th><th>관련 항목</th></tr></thead><tbody>' + Object.keys(n.laws).map(function (k) { var l = n.laws[k]; return '<tr><td>' + esc(k) + '</td><td>' + esc(l.date || '-') + '</td><td class="sub">' + esc((l.reviews || []).map(function (id) { var r = REVIEWS.filter(function (x) { return x.id === id; })[0]; return r ? r.name : id; }).join(', ')) + '</td></tr>'; }).join('') + '</tbody></table></div>';
   h += '<div class="card"><h3>최근 변경 감지</h3>' + (m.changes && m.changes.length ? '<ul>' + m.changes.slice(0, 30).map(function (c) { return '<li>' + esc(c.date) + ' · ' + (c.type === 'law' ? esc(c.name) + ' 시행일 ' + esc(c.from) + ' → ' + esc(c.to) : esc(c.name) + ' 조례 개정') + '</li>'; }).join('') + '</ul>' : '<p class="hint">아직 감지된 변경이 없습니다.</p>') + '</div>';
@@ -1037,6 +1048,11 @@ document.addEventListener('DOMContentLoaded', function () {
   Promise.all([loadJSON('data/regions.json').catch(function () { return null; }), loadJSON('data/national.json').catch(function () { return null; }), loadJSON('data/meta.json').catch(function () { return null; })]).then(function (a) {
     D.regions = a[0]; D.national = a[1]; D.meta = a[2];
     $('#syncDate').textContent = D.meta ? D.meta.updated : '동기화 전';
+    if ($('#syncDate2')) $('#syncDate2').textContent = D.meta ? D.meta.updated : '불러오지 못함';
+    // 기준일이 3일 넘게 지났으면 (자동 갱신이 멈춘 것) 경고로 바꾼다
+    var age = D.meta && D.meta.updated ? (Date.now() - Date.parse(D.meta.updated)) / 864e5 : 999;
+    if ($('#ageMsg') && age > 3) { $('#ageMsg').innerHTML = '<b>자동 갱신이 ' + Math.floor(age) + '일째 멈춰 있어 이후 개정된 지자체 조례·법령은 반영되지 않았을 수 있습니다.</b>'; $('#data-age').style.background = '#fdecee'; }
+    if ((!D.regions || !D.national) && $('#file-warn')) $('#file-warn').style.display = 'block';
     ensureDetail(cur().p); renderAll();
   });
 });
