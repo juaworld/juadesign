@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { watchLaws } from './law-watch.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(here, '..', 'data');
@@ -73,13 +74,19 @@ const meta = { updated: today, laws: N.laws, changes: changes.slice(0, 200), fai
 writeJSON('meta.json', meta);
 console.log('coverage', meta.coverage);
 
+// 2.5) 업무 프로세스 기준 조문 감시 (law-watch.json → data/law-changes.json)
+console.log('== 조문 감시');
+let LW = { changes: [], errors: [], count: 0 };
+try { LW = await watchLaws(env, readJSON, writeJSON, today); console.log('조문', LW.count, '건, 바뀜', LW.changes.length, '건', LW.errors.length ? '오류 ' + LW.errors.length : ''); } catch (e) { console.log('조문 감시 실패', e.message); }
+
 // 3) 이슈 본문 (변경 감지 시)
 const newChanges = changes.filter(c => c.date === today);
-if (newChanges.length || failedChecks.length) {
+if (newChanges.length || failedChecks.length || LW.changes.length) {
   const body = ['## 가상인허가센터 기준 변경 감지 (' + today + ')', '',
     ...newChanges.map(c => c.type === 'law' ? '- **' + c.name + '** 시행일 ' + c.from + ' → ' + c.to + ' (' + c.kind + ') — 영향: ' + c.reviews.join(', ') : '- 조례 개정: **' + c.name + '**'),
     ...(failedChecks.length ? ['', '### 자동 검증값 불일치 (rules.js 기준값 재확인 필요)', ...failedChecks.map(c => '- ' + c.law + ' [' + c.id + '] 기대값 ' + c.expected + ' / 원문 ' + c.found)] : []),
-    '', '조례 수치(건폐율·용적률·주차·조경)는 이미 자동 반영되었습니다. 법령 개정은 판정 로직(rules.js) 검토가 필요합니다.'];
+    ...(LW.changes.length ? ['', '### 업무 프로세스 기준 조문이 바뀜 (law-basis.js 값 원문 대조 필요)', ...LW.changes.map(c => '- **' + c.law + ' ' + (/^별표/.test(c.art) ? c.art : '제' + c.art + '조') + '** 시행 ' + (c.from.date || '?') + ' → ' + (c.to.date || '?') + (c.keys.length ? ' — 기준값: ' + c.keys.join(', ') : ''))] : []),
+    '', '조례 수치(건폐율·용적률·주차·조경)는 이미 자동 반영되었습니다. 법령 개정은 판정 로직(rules.js)과 업무 프로세스 law-basis.js 검토가 필요합니다.'];
   fs.writeFileSync(path.join(DATA, '..', 'scripts', 'issue.md'), body.join('\n'));
   console.log('ISSUE');
 }
