@@ -29,7 +29,7 @@ export async function watchLaws(env, readJSON, writeJSON, today) {
     const mst = it.법령일련번호 || it.행정규칙일련번호;
     const d = await env.getJSON('/DRF/lawService.do', { target, type: 'JSON', MST: mst });
     await env.sleep(120);
-    return (docCache[key] = { date: it.시행일자, pub: it.공포일자 || it.발령일자, kind: it.제개정구분명, body: admrul ? d.AdmRulService || d : d.법령 });
+    return (docCache[key] = { date: it.시행일자, pub: it.공포일자 || it.발령일자, kind: it.제개정구분명, body: admrul ? d.AdmRulService || d.Law || d : d.법령 });
   }
   for (const W of list) {
     try {
@@ -47,7 +47,7 @@ export async function watchLaws(env, readJSON, writeJSON, today) {
         const whole = norm(JSON.stringify(D.body).replace(/\n|\t/g, ' ').replace(/["{}\[\]]/g, ' '));
         const m = whole.match(new RegExp('제' + W.art + '조\\([^)]*\\)[\\s\\S]{0,8000}?(?=제' + (Number(W.art) + 1) + '조\\(|$)'));
         text = m ? m[0] : '';
-        if (!text) errors.push(W.id + ': 고시 본문 키 ' + Object.keys(D.body || {}).slice(0, 12).join(','));
+        if (!text) { const i = whole.indexOf('제' + W.art + '조'); errors.push(W.id + ': 고시 본문 키 ' + Object.keys(D.body || {}).slice(0, 12).join(',') + ' / 「제' + W.art + '조」 ' + (i < 0 ? '없음' : '근처: ' + whole.slice(Math.max(0, i - 80), i + 160))); }
       } else {
         const jo = [].concat(D.body.조문?.조문단위 || []).filter((a) => a.조문여부 === '조문');
         const a = jo.find((x) => (x.조문번호 + (x.조문가지번호 ? '의' + x.조문가지번호 : '')) === W.art);
