@@ -45,7 +45,7 @@ export async function watchLaws(env, readJSON, writeJSON, today) {
       } else if (W.admrul) {
         // 행정규칙(고시)은 본문 구조가 달라 JSON 전체를 글로 펴서 「제n조(」부터 다음 「제n+1조(」 앞까지 자른다
         const whole = norm(JSON.stringify(D.body).replace(/\n|\t/g, ' ').replace(/["{}\[\]]/g, ' '));
-        const m = whole.match(new RegExp('제' + W.art + '조\([^)]*\)[\s\S]{0,8000}?(?=제' + (Number(W.art) + 1) + '조\(|$)'));
+        const m = whole.match(new RegExp('제' + W.art + '조\\([^)]*\\)[\\s\\S]{0,8000}?(?=제' + (Number(W.art) + 1) + '조\\(|$)'));
         text = m ? m[0] : '';
         if (!text) errors.push(W.id + ': 고시 본문 키 ' + Object.keys(D.body || {}).slice(0, 12).join(','));
       } else {
@@ -55,7 +55,7 @@ export async function watchLaws(env, readJSON, writeJSON, today) {
       }
       if (!text) { errors.push(W.id + ': 본문 없음 (' + W.law + ' ' + (W.art || W.bylaw) + ')'); continue; }
       const h = hash(text), old = prev.items?.[W.id];
-      items[W.id] = { law: W.law, art: W.art || W.bylaw, keys: W.keys || [], date: D.date, hash: h, text: text.slice(0, 3000), seen: today };
+      items[W.id] = { law: W.law, art: W.art || W.bylaw, keys: W.keys || [], date: D.date, hash: h, text: text.slice(0, W.bylaw ? 16000 : 6000), seen: today }; // 별표는 길어서 넉넉히 (교통영향평가 공장 항목 등 뒷부분까지)
       if (old && old.hash && old.hash !== h) {
         changes.unshift({ date: today, id: W.id, law: W.law, art: W.art || W.bylaw, keys: W.keys || [], from: { date: old.date, hash: old.hash }, to: { date: D.date, hash: h }, kind: D.kind || '' });
       }
