@@ -27,7 +27,7 @@ export async function watchLaws(env, readJSON, writeJSON, today) {
     const it = arr.find((x) => norm(x.법령명한글 || x.행정규칙명) === name) || arr[0];
     if (!it) throw new Error('법령 못 찾음: ' + name);
     const mst = it.법령일련번호 || it.행정규칙일련번호;
-    const d = await env.getJSON('/DRF/lawService.do', { target, type: 'JSON', MST: mst });
+    const d = await env.getJSON('/DRF/lawService.do', admrul ? { target, type: 'JSON', ID: mst, MST: mst } : { target, type: 'JSON', MST: mst }); // 행정규칙은 ID 로 받는다
     await env.sleep(120);
     return (docCache[key] = { date: it.시행일자, pub: it.공포일자 || it.발령일자, kind: it.제개정구분명, body: admrul ? d.AdmRulService || d.Law || d : d.법령 });
   }
