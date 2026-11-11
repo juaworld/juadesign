@@ -36,12 +36,18 @@ export async function watchLaws(env, readJSON, writeJSON, today) {
       const D = await doc(W.law, !!W.admrul);
       let text = '';
       if (W.bylaw) {
-        const b = [].concat(D.body.별표?.별표단위 || []).find((x) => norm(x.별표제목 || '').startsWith(W.bylaw) || norm(x.별표번호 || '') === W.bylaw.replace(/별표\s*/, ''));
+        const want = W.bylaw.replace(/별표\s*/, '').trim(); // "4" / "1" / "" (번호 없는 별표)
+        const num = (x) => String(x || '').replace(/[^0-9]/g, '').replace(/^0+/, '');
+        const all = [].concat(D.body.별표?.별표단위 || []);
+        const b = all.find((x) => (want ? num(x.별표번호) === want || norm(x.별표제목 || '').replace(/\s/g, '').startsWith('별표' + want) : num(x.별표번호) === '' || norm(x.별표제목 || '') === '별표')) || (!want && all.length === 1 ? all[0] : null);
         text = b ? tbl(b.별표내용) : '';
+        if (!text) errors.push(W.id + ': 별표 목록 ' + all.slice(0, 8).map((x) => `[${x.별표번호}] ${norm(x.별표제목).slice(0, 20)}`).join(' | '));
       } else if (W.admrul) {
-        const jo = [].concat(D.body.조문내용 || D.body.조문?.조문단위 || []);
-        const a = jo.find((x) => String(x.조문번호 || '').replace(/^0+/, '') === W.art || norm(x.조문내용 || '').startsWith('제' + W.art + '조'));
-        text = a ? flat(a) : norm(JSON.stringify(D.body)).match(new RegExp('제' + W.art + '조[^제]{0,6000}'))?.[0] || '';
+        // 행정규칙(고시)은 본문 구조가 달라 JSON 전체를 글로 펴서 「제n조(」부터 다음 「제n+1조(」 앞까지 자른다
+        const whole = norm(JSON.stringify(D.body).replace(/\n|\t/g, ' ').replace(/["{}\[\]]/g, ' '));
+        const m = whole.match(new RegExp('제' + W.art + '조\([^)]*\)[\s\S]{0,8000}?(?=제' + (Number(W.art) + 1) + '조\(|$)'));
+        text = m ? m[0] : '';
+        if (!text) errors.push(W.id + ': 고시 본문 키 ' + Object.keys(D.body || {}).slice(0, 12).join(','));
       } else {
         const jo = [].concat(D.body.조문?.조문단위 || []).filter((a) => a.조문여부 === '조문');
         const a = jo.find((x) => (x.조문번호 + (x.조문가지번호 ? '의' + x.조문가지번호 : '')) === W.art);
