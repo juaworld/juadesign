@@ -316,8 +316,22 @@
         }
         // 경관조례
         for (const src of srcList('scape', org, R)) {
-          const S = parseLandscapeOrd(ordinArticles(await getOrd(src.mst)));
-          if (S.bldText) { R.scape = { ...S, src }; break; }
+          const Ls = await getOrd(src.mst);
+          const S = parseLandscapeOrd(ordinArticles(Ls));
+          if (!S.bldText) continue;
+          // 심의 대상 조문이 「별표 N에 따른다」면 그 별표(본문 글 또는 hwp·hwpx 첨부)를 글로 받아 둔다 — 업무 프로세스 경관 판정이 쓴다
+          const ns = [...new Set([...S.bldText.matchAll(/별표\s*(\d+)(?![\d의])/g)].map(m => m[1]))].slice(0, 3);
+          const byl = [];
+          for (const n of ns) {
+            const b = findBylaw(Ls, n); if (!b) continue;
+            let text = norm(b.별표내용).length > 50 ? String(b.별표내용) : '', file = text ? 'text' : null;
+            if (!text && b.별표첨부파일명) {
+              try { const by = await env.getBytes(String(b.별표첨부파일명).replace(/^https?:\/\/www\.law\.go\.kr/, '')); text = await attachmentText(by, env); file = by[0] === 0x50 ? 'hwpx' : by[0] === 0xD0 ? 'hwp' : 'other'; await env.sleep(80); }
+              catch (e) { env.log('경관 별표 실패', org, n, e.message); }
+            }
+            byl.push({ n: +n, title: String(b.별표제목 || '').trim(), text: String(text || '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, 6000), file, url: b.별표첨부파일명 || null });
+          }
+          R.scape = { ...S, src, ...(byl.length ? { byl } : {}) }; break;
         }
         // 주차장 조례 (부설주차장 별표)
         for (const src of srcList('park', org, R)) {
