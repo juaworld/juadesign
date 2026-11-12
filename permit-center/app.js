@@ -1057,5 +1057,49 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 });
 function vwProbe(layer, x, y) { return vw('/req/data', { service: 'data', request: 'GetFeature', data: layer, geomFilter: 'POINT(' + x + ' ' + y + ')', crs: 'EPSG:4326', geometry: 'false', size: 5, page: 1, errorformat: 'json' }).then(function (j) { var r = j && j.response || {}; return { layer: layer, status: r.status, err: r.error ? r.error.code + ' ' + (r.error.text || '') : '', n: feats(j).length, props: feats(j).map(function (f) { return f.properties; }) }; }, function (e) { return { layer: layer, fail: e.message }; }); }
+/* ---------- 업무프로세스 연결 — 받기(주소 뒤 #hbp=…, 서버로 가지 않음) · 업무프로세스로 보내기(복사) ---------- */
+var HBP_FIELDS = ['address', 'zone', 'use', 'owner', 'work', 'siteArea', 'bldgArea', 'gfa', 'floorsAbove', 'floorsBelow', 'height', 'excavation', 'hvac', 'districtPlan', 'greenbelt', 'landscapeDistrict', 'keyLandscapeArea', 'industrialComplex', 'landCat'];
+function b64uDec(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return decodeURIComponent(escape(atob(s))); }
+function hbpReceive() {
+  var m = /[#&]hbp=([^&]+)/.exec(location.hash); if (!m) return;
+  var d; try { d = JSON.parse(b64uDec(m[1])); } catch (e) { toast('업무프로세스에서 받은 정보를 읽지 못했습니다'); return; }
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  var name = String(d.pj || '업무프로세스 프로젝트');
+  var prj = state.projects.filter(function (x) { return x.hbPj === name; })[0];
+  if (!prj) { prj = newProject(name); prj.hbPj = name; state.projects.push(prj); }
+  var p = prj.p, f = d.f || {}, n = 0;
+  HBP_FIELDS.forEach(function (k) { var v = f[k]; if (v === '' || v == null) return; p[k] = v; n++; });
+  if (f.gfa && !p.gfaFar) p.gfaFar = f.gfa;
+  p.name = name; state.cur = prj.id; save();
+  var ai = $('#addrIn'); if (ai && f.address) ai.value = f.address;
+  if (f.address) hbpRegion(prj, 0);
+  renderAll();
+  toast('업무프로세스 「' + name + '」 정보 ' + n + '칸을 받았습니다' + (f.address ? ' — 「조회」를 누르면 토지이음 정보로 다시 채웁니다' : ''));
+}
+// 지자체는 자료(regions)를 다 읽은 뒤 주소로 맞춘다
+function hbpRegion(prj, tries) {
+  if (!D.regions) { if (tries < 60) setTimeout(function () { hbpRegion(prj, tries + 1); }, 250); return; }
+  var r = matchRegion(prj.p.address); if (r) { prj.p.region = r; save(); ensureDetail(prj.p); renderAll(); }
+}
+function hbpSend() {
+  var prj = cur(), p = prj.p, app = applicability(p), L = limits(p);
+  var rv = REVIEWS.map(function (r) { var a = app[r.id] || {}; return { id: r.id, t: r.name, lvl: a.lvl || '', why: (a.why || []).slice(0, 4) }; });
+  var out = { kind: 'hb-permit-center', v: 1, at: new Date().toISOString(), pj: prj.hbPj || p.name, src: (D.meta && D.meta.updated) || '',
+    f: { address: p.address, region: p.region, zone: p.zone, landUses: p.landUses || [], landCat: p.landCat || '', siteArea: p.siteArea, gfa: p.gfa, bldgArea: p.bldgArea, floorsAbove: p.floorsAbove, height: p.height, use: p.use, owner: p.owner,
+      industrialComplex: !!p.industrialComplex, landscapeDistrict: !!p.landscapeDistrict, keyLandscapeArea: !!p.keyLandscapeArea, districtPlan: !!p.districtPlan, greenbelt: !!p.greenbelt, hLimit: p.hLimit || '', looked: !!p.pnu },
+    lim: { bcr: L.bcr, far: L.far, bcrSrc: L.bcrSrc, farSrc: L.farSrc }, rv: rv };
+  var txt = 'HBPC1:' + JSON.stringify(out);
+  var done = function () { toast('복사했습니다 — 업무프로세스의 「가상인허가센터 가져오기」를 누르면 들어갑니다'); };
+  var fallback = function () {
+    var ta = document.createElement('textarea'); ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
+    var ok = false; try { ok = document.execCommand('copy'); } catch (e) {} document.body.removeChild(ta);
+    if (ok) { done(); return; }
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' })); a.download = '가상인허가센터_' + (out.pj || '결과') + '.hbpc.txt'; a.click();
+    toast('파일로 저장했습니다 — 업무프로세스 「발주처 자료로 채우기」에 이 파일을 넣어도 됩니다');
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, fallback); else fallback();
+}
+document.addEventListener('DOMContentLoaded', function () { hbpReceive(); var b = $('#toProc'); if (b) b.addEventListener('click', hbpSend); });
+window.addEventListener('hashchange', hbpReceive);
 window.VPC = { vwProbe: vwProbe, renderAll: renderAll, toast: toast, cur: cur, save: save, regionRaw: function (k) { return D.regions ? D.regions.regions[k] : null; }, applicability: applicability, numericChecks: numericChecks, evaluate: evaluate, state: function () { return state; }, D: D, splitClauses: splitClauses, evalScapeClause: evalScapeClause, landscapeNeed: landscapeNeed, limits: limits, applyLookup: applyLookup };
 })();
