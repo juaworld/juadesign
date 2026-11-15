@@ -119,6 +119,7 @@ function evalScapeClause(c, p, ctx) {
   var hasK = /중점경관관리구역/.test(c.text), hasD = /경관지구/.test(c.text.replace(/중점경관관리구역/g, ''));
   if (hasK || hasD) { if ((hasK && p.keyLandscapeArea) || (hasD && p.landscapeDistrict)) res.met.push(hasK && p.keyLandscapeArea ? '중점경관관리구역' : '경관지구'); else res.fail.push((hasD ? '경관지구' : '') + (hasD && hasK ? '·' : '') + (hasK ? '중점경관관리구역' : '') + ' 아님'); }
   if (/지방자치단체|공공기관|지방공기업|공공건축물/.test(c.text.replace(/지방자치단체의 조례/g, '')) && !/경관지구|중점/.test(c.text)) { if (p.owner !== '민간') res.met.push('공공 건축주'); else res.fail.push('민간 건축주'); }
+  if (/지구\s*단위\s*계획\s*구역/.test(c.text) && !/지구단위계획시행지침|지구단위계획으로/.test(c.text.replace(/\s/g, ''))) { if (p.districtPlan) res.met.push('지구단위계획구역'); else res.fail.push('지구단위계획구역 아님'); }
   var zg = Object.keys(ZONE_GROUP).filter(function (g) { return t.indexOf(g) >= 0; });
   if (zg.length) { if (zg.some(function (g) { return ZONE_GROUP[g].test(p.zone); })) res.met.push(p.zone); else res.fail.push(zg.join('·') + ' 아님'); }
   var plain = c.text.replace(/「[^」]*」/g, '').replace(/별표\s*1\s*제\d+호(의\d+)?(\s*[가-힣]목)?/g, '').replace(/다만[^.]*제외[^.]*\./g, '');
@@ -138,8 +139,19 @@ function evalScapeClause(c, p, ctx) {
   if (size.length) { if (sizeOk) res.met.push(size.join(' 또는 ')); else res.fail.push(size.join(' 또는 ') + ' 미만'); }
   var loc = t.match(/[「」\w가-힣·ㆍ\s]{0,40}?(고속국도|일반국도|국도|지방도|도로|하천|해안|호수|저수지|공원|문화유산|문화재|국가유산|역사|철도|나들목|인터체인지|IC)[^.]{0,40}?(\d+)\s*미터\s*이내/);
   if (loc) { var ans = p.scapeAns[c.key]; var q = loc[0].replace(/^\s*\d+\.\s*/, '').trim(); if (ans === 'y') res.met.push(q); else if (ans === 'n') res.fail.push(q + ' 아님'); else res.ask = q; }
+  if (!loc) { var rd = t.match(/(\d+)\s*미터\s*이상\s*(?:의\s*)?도로에\s*접/); if (rd) { var ans2 = p.scapeAns[c.key], q2 = rd[0] + '한 대지'; if (ans2 === 'y') res.met.push(q2); else if (ans2 === 'n') res.fail.push(q2 + ' 아님'); else res.ask = q2; } }
   if (!res.met.length && !res.fail.length && !res.ask) res.fail.push('적용 조건 없음(일반 규정)');
   return res;
+}
+// 조문 안의 갈래 — 「가. 나. 다.」와 「1) 2) 3)」는 하나만 맞아도 해당 (이천 3호: 1) 연면적 500㎡ 2) 5층 3) 판넬 외벽 4) 공동주택)
+//   갈래마다 호 머리(공통 조건)를 붙여 따로 판정한다
+function scapeAlts(text) {
+  var MOK = '가나다라마바사아자차', NB = { '다': /[한된있없같이른는니않였했]$/, '나': /[하거]$/, '가': /[이]$/ };
+  function moks(u) { var at = [], want = 0, re = /([가-차])\.(?![.\d])/g, m; while ((m = re.exec(u))) { if (m[1] !== MOK.charAt(want)) continue; var pre = u.slice(Math.max(0, m.index - 1), m.index); if (NB[m[1]] && NB[m[1]].test(pre)) continue; at.push(m.index); want++; } if (at.length < 2) return null; return { lead: u.slice(0, at[0]), items: at.map(function (x, i) { return u.slice(x + 2, i + 1 < at.length ? at[i + 1] : u.length); }) }; }
+  function parens(u) { var at = [], want = 1, re = /(\d{1,2})\)/g, m; while ((m = re.exec(u))) { if (+m[1] === want && !/\d/.test(u.charAt(m.index - 1))) { at.push(m.index); want++; } } if (at.length < 2) return null; return { lead: u.slice(0, at[0]), items: at.map(function (x, i) { return u.slice(x + String(i + 1).length + 1, i + 1 < at.length ? at[i + 1] : u.length); }) }; }
+  var out = [];
+  (function rec(u, depth) { var s = moks(u) || (depth < 2 ? parens(u) : null); if (!s) { out.push(u); return; } s.items.forEach(function (it) { rec(s.lead + ' ' + it, depth + 1); }); })(String(text || ''), 0);
+  return out.length > 1 ? out : null;
 }
 function scapeEval(p, ctx) {
   var det = regionDetail(p), R = regionOf(p);
@@ -153,7 +165,11 @@ function scapeEval(p, ctx) {
   var cl = splitClauses(det.scape.bldText);
   cl.forEach(function (c) {
     if (/제외|생략|아니할 수|하지 않을 수|적용하지/.test(c.intro + (c.intro ? '' : c.text.slice(0, 60)))) return;
-    var r = evalScapeClause(c, p, ctx); c.res = r; out.clauses.push(c);
+    var alts = scapeAlts(c.text), r;
+    if (alts) { var rs = alts.map(function (a) { return evalScapeClause({ key: c.key, intro: c.intro, text: a }, p, ctx); });
+      r = rs.filter(function (x) { return !x.fail.length && !x.ask && x.met.length; })[0] || rs.filter(function (x) { return !x.fail.length && x.ask; })[0] || rs[0]; }
+    else r = evalScapeClause(c, p, ctx);
+    c.res = r; out.clauses.push(c);
     var short = (c.text.length > 90 ? c.text.slice(0, 90) + '…' : c.text);
     if (!r.fail.length && !r.ask && r.met.length) { out.lvl = 'req'; out.why.push('해당: ' + short + ' (' + r.met.join(', ') + ')'); }
     else if (!r.fail.length && r.ask) { if (out.lvl !== 'req') out.lvl = 'ask'; out.asks.push({ scapeKey: c.key, label: '대지가 "' + r.ask + '"에 해당합니까? — ' + det.scape.src.name + ' ' + (det.scape.bldArt || '') }); }
