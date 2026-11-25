@@ -1,1 +1,1 @@
-(window.__VPC_DATA=window.__VPC_DATA||{})["data/law-changes.json"]={"updated":"2026-11-24","changes":[],"errors":[]};
+(window.__VPC_DATA=window.__VPC_DATA||{})["data/law-changes.json"]={"updated":"2026-11-25","changes":[],"errors":[]};
